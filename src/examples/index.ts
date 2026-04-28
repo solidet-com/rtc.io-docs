@@ -31,7 +31,7 @@ const SHARED_PACKAGE_JSON = (deps: Record<string, string> = {}) =>
         preview: 'vite preview',
       },
       dependencies: {
-        'rtc.io': '^1.2.0',
+        'rtc.io': '^1.4.0',
         ...deps,
       },
       devDependencies: {
