@@ -31,7 +31,9 @@ const SHARED_PACKAGE_JSON = (deps: Record<string, string> = {}) =>
         preview: 'vite preview',
       },
       dependencies: {
-        'rtc.io': '^1.4.0',
+        // 'latest' resolves on each StackBlitz mount, so sandboxes track
+        // whatever's currently published without a docs redeploy.
+        'rtc.io': 'latest',
         ...deps,
       },
       devDependencies: {
