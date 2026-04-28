@@ -150,6 +150,22 @@ socket.on("track-added", ({ peerId, stream, track }) => {
 
 This is an rtc.io reserved event — you can listen but a peer can't spoof it. Useful for "they turned the camera on now" UI changes without your own application-level signaling.
 
+## Track-removed (partial departure)
+
+The mirror of `track-added`: when the WebRTC stack drops a track from a remote stream — the remote ended a screen share, called `removeTrack` and renegotiated, or stopped a transceiver — the receive side fires `track-removed`:
+
+```ts
+socket.on("track-removed", ({ peerId, stream, track }) => {
+  if (track.kind === "video" && stream.getVideoTracks().length === 0) {
+    hideVideoTile(peerId);
+  }
+});
+```
+
+The `stream` argument is the same `MediaStream` you originally got via `socket.on("camera", ...)`, so you can correlate it back to the same tile. Use this for "they turned the camera off" UI without inventing app-level events.
+
+`track-removed` is for *partial* departures — the peer is still connected, they just dropped a track. For the peer leaving entirely, listen on `peer-disconnect`.
+
 ## Synthetic streams
 
 If a peer's tracks arrive without an associated `MediaStream` (rare, can happen with some SFU configurations), rtc.io creates a synthetic one and continues:

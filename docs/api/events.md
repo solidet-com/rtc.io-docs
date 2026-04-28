@@ -1,7 +1,7 @@
 ---
 id: events
 title: Reserved events
-description: peer-connect, peer-disconnect, track-added, plus the #rtcio:* internal namespace — what they mean and how to use them.
+description: peer-connect, peer-disconnect, track-added, track-removed, plus the #rtcio:* internal namespace — what they mean and how to use them.
 ---
 
 # Reserved events
@@ -13,11 +13,12 @@ A handful of event names have library-defined semantics. Peers can't spoof them 
 | `peer-connect` | `socket.on(...)` | `({ id })` | Ctrl DataChannel to a peer opened |
 | `peer-disconnect` | `socket.on(...)` | `({ id })` | Peer connection closed (only after peer-connect fired) |
 | `track-added` | `socket.on(...)` | `({ peerId, stream, track })` | A new track joined an existing remote `MediaStream` |
+| `track-removed` | `socket.on(...)` | `({ peerId, stream, track })` | A track was dropped from an existing remote `MediaStream` |
 | `peer-left` | `RTCIOBroadcastChannel.on(...)` | `(peerId)` | One peer's per-channel underlying connection closed |
 | `open` / `close` / `error` / `drain` / `data` | `RTCIOChannel.on(...)` | varies | Channel-level events |
 | `#rtcio:*` | internal only | varies | Library signaling — never use |
 
-This page covers the user-visible ones (the first four). Internal `#rtcio:*` events are documented in the [signaling protocol](/docs/server/protocol).
+This page covers the user-visible ones (the first five). Internal `#rtcio:*` events are documented in the [signaling protocol](/docs/server/protocol).
 
 ## peer-connect
 
@@ -73,6 +74,32 @@ socket.on("track-added", ({ peerId, stream, track }) => {
 
 The library wires this up via `MediaStream.onaddtrack` on the receive side. The first track on a fresh stream is delivered via `socket.on("camera", ...)` (or whatever event the sender emitted with); only *subsequent* tracks fire `track-added`.
 
+## track-removed
+
+```ts
+socket.on("track-removed", ({ peerId, stream, track }: {
+  peerId: string,
+  stream: MediaStream,
+  track: MediaStreamTrack,
+}) => {
+  // The remote peer dropped a track from this stream.
+});
+```
+
+Fires when the WebRTC stack removes a track from a remote `MediaStream` — for example, the remote peer stopped a screen share, switched their camera off via `removeTrack`, or ended a transceiver. The event always pairs with the same `stream` argument the receiver originally got via `socket.on("camera", ...)` (or whichever event the sender emitted with), so you can correlate it back to your tile.
+
+```ts
+socket.on("track-removed", ({ peerId, stream, track }) => {
+  if (track.kind === "video" && stream.getVideoTracks().length === 0) {
+    hideVideoTile(peerId);
+  }
+});
+```
+
+The library wires this up via `MediaStream.onremovetrack` — only *platform-driven* removals fire it. Your own `stream.removeTrack(...)` on a local copy does not.
+
+`track-removed` is partial-departure detection (the peer is still there, they just dropped one track). For the peer leaving entirely, listen on [`peer-disconnect`](#peer-disconnect).
+
 ## Reserved namespace
 
 Any event name starting with `#rtcio:` is reserved for library internals. The ctrl-channel filter drops these on receive, so peers can't spoof them.
@@ -115,6 +142,6 @@ The same constants are exported from `rtc.io-server` for server-side use.
 
 ## Filter rationale
 
-A peer that could spoof `peer-connect` could fire your acquire-on-connect handler for an arbitrary id, leaking resources. A peer that could spoof `track-added` could fake a track arriving from someone who never shared one. The filter prevents both.
+A peer that could spoof `peer-connect` could fire your acquire-on-connect handler for an arbitrary id, leaking resources. A peer that could spoof `track-added` or `track-removed` could fake track lifecycle events from someone who never shared one. The filter prevents all of them.
 
 If you genuinely need to send a custom lifecycle event peer-to-peer, pick a non-reserved name (e.g. `app:peer-up`). Reserved names exist exactly because they're authoritative — only the local library is allowed to emit them.

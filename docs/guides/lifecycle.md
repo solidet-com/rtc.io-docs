@@ -134,6 +134,7 @@ The library emits several lifecycle events. **Peers cannot spoof them** — the 
 | `peer-connect` | Ctrl DataChannel to a peer opens |
 | `peer-disconnect` | Peer connection closes after `peer-connect` already fired |
 | `track-added` | A new track joins an existing remote `MediaStream` (e.g. peer turned camera on after starting with audio only) |
+| `track-removed` | A track is dropped from an existing remote `MediaStream` (e.g. peer ended a screen share) |
 
 Internal events (signaling, server escape hatch) are prefixed `#rtcio:` and are also filtered. See [Reserved events](/docs/api/events) for the complete list.
 
@@ -150,6 +151,27 @@ socket.on("connect_error", (err) => console.error("signaling error:", err.messag
 These tell you about the **signaling channel**, not your peer-to-peer connections. If signaling drops mid-call, your existing peer connections keep working — you just can't onboard new joiners until socket.io reconnects.
 
 In the rtc.io demo we show this with a "Signaling server unreachable — existing peers stay connected over P2P" banner.
+
+### Signaling reconnect
+
+socket.io-client auto-reconnects by default (`reconnection: true`, infinite retries, exponential backoff) and **buffers** outgoing `emit` calls during the gap. So most signaling traffic — offers, answers, ICE candidates emitted during the outage — lands cleanly when the socket comes back. The library adds a few things on top:
+
+- **Existing P2P connections are not torn down on signaling drop.** They run over STUN/TURN, not the signaling server. A signaling outage does not kill an in-progress call.
+- **The watchdog stays authoritative.** A signaling-only outage cannot trigger `peer-disconnect` — only the WebRTC liveness state can. (See [How rtc.io decides a peer is gone](#how-rtcio-decides-a-peer-is-gone) above.)
+- **Stuck peers are nudged on reconnect.** Every `connect` event after the first walks the peer table; for any peer currently in `disconnected` or `failed`, the library calls `restartIce()`. The recovery offer rides the freshly-restored signaling channel instead of a stale one from before the drop.
+- **Peer-left hints across the gap still cross-check WebRTC.** If a `#rtcio:peer-left` arrives buffered after a long outage, it's still treated as advisory — recorded if the WebRTC layer disagrees, applied immediately if both signals agree.
+
+What you typically still want to handle in app code:
+
+```ts
+// Re-join the room on every connect (initial + reconnect). socket.io
+// reconnect re-establishes the transport but does not replay your join.
+socket.on("connect", () => {
+  socket.server.emit("join-room", { roomId, name });
+});
+```
+
+For production deployments where reconnect churn matters, enable [`connectionStateRecovery`](https://socket.io/docs/v4/connection-state-recovery) on the server. That preserves `socket.id` across short drops, so existing peers keep finding you by the same id without needing the watchdog to reap a stale entry.
 
 ## Cleanup on tab close
 

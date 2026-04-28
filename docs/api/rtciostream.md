@@ -98,6 +98,25 @@ const off = camera.onTrackChanged((stream) => {
 off();
 ```
 
+### `onTrackAdded(callback)` / `onTrackRemoved(callback)`
+
+```ts
+onTrackAdded(callback: (track: MediaStreamTrack) => void): () => void
+onTrackRemoved(callback: (track: MediaStreamTrack) => void): () => void
+```
+
+Per-track variants of `onTrackChanged`. They fire when the **platform** mutates the stream (e.g. the WebRTC stack delivers a new remote track, or drops one when the remote stops sending) and hand you the specific `MediaStreamTrack` involved. Programmatic `addTrack` / `removeTrack` on a local copy does not fire these — for the user-driven case, use `onTrackChanged`.
+
+Each returns an unsubscribe function. Callbacks are also cleared on `dispose()`, so internal listeners cannot outlive the wrapper.
+
+```ts
+const off = remoteStream.onTrackRemoved((track) => {
+  console.log("remote dropped a", track.kind, "track");
+});
+```
+
+These are the primitives behind the receive-side [`track-added`](events#track-added) and [`track-removed`](events#track-removed) events; you usually want those instead unless you're holding a stream wrapper directly.
+
 ### `toJSON()`
 
 Returns the wire-format string `"[RTCIOStream] <id>"`. The library uses this when serializing stream metadata. Receivers detect this string in incoming JSON and substitute back the local `RTCIOStream` instance.
@@ -156,6 +175,16 @@ socket.untrackStream(myStream);
 ```
 
 This drops it from the registry. Already-connected peers still have the transceivers; you'll need to either `stop()` the underlying tracks or `replaceTrack(null)` if you want media to actually stop flowing. See [Streams](/docs/guides/streams) for the full pattern.
+
+### `dispose()`
+
+```ts
+dispose(): void
+```
+
+Detaches the wrapper's platform-event listeners and clears all registered `onTrackChanged` / `onTrackAdded` / `onTrackRemoved` callbacks. Use it when you're done with the wrapper but the underlying `MediaStream` lives on — e.g. you handed it to a `<video>` element and the wrapper would otherwise pin closures referencing the (now-dead) peer.
+
+The library calls this for you on every inbound stream when its peer disconnects, so you almost never need to call it yourself.
 
 ## Common pitfalls
 
