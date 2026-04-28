@@ -13,6 +13,7 @@ The wire format between a `rtc.io` client and a `rtc.io-server` is a tiny set of
 ```ts
 RtcioEvents.MESSAGE     = "#rtcio:message"
 RtcioEvents.INIT_OFFER  = "#rtcio:init-offer"
+RtcioEvents.PEER_LEFT   = "#rtcio:peer-left"
 
 // Reserved for future use, currently unemitted:
 RtcioEvents.OFFER       = "#rtcio:offer"
@@ -21,7 +22,7 @@ RtcioEvents.CANDIDATE   = "#rtcio:candidate"
 RtcioEvents.STREAM_META = "#rtcio:stream-meta"
 ```
 
-Only `#rtcio:message` and `#rtcio:init-offer` are part of the active wire protocol. The others are reserved so future protocol changes can use them without name collisions on apps that listen for them.
+`#rtcio:message`, `#rtcio:init-offer` and `#rtcio:peer-left` are the three events in the active wire protocol. The others are reserved so future protocol changes can use them without name collisions on apps that listen for them.
 
 ## Envelope shape
 
@@ -132,6 +133,34 @@ The "what stream is this" probe sent by a receiver:
 ```
 
 The owner responds with variant 3 above. If the owner doesn't have any events registered for that stream yet, the request is silently ignored — the next `socket.emit` for that stream will push the metadata via the replay flow.
+
+## #rtcio:peer-left
+
+Fast-path notification from the server to the rooms a leaving socket was in:
+
+```json
+{ "id": "socket-id-of-the-departed" }
+```
+
+Emit it from a `disconnecting` handler so the socket is still listed in `socket.rooms`:
+
+```ts
+socket.on("disconnecting", () => {
+  socket.rooms.forEach((roomId) => {
+    if (roomId === socket.id) return;
+    socket.to(roomId).emit(RtcioEvents.PEER_LEFT, { id: socket.id });
+  });
+});
+```
+
+`rtc.io-server`'s `addDefaultListeners` does this for you. You only need to wire it manually if you're writing a custom signaling server (or extending one that doesn't use `addDefaultListeners`).
+
+The receiving client treats this as a **hint**, not authority. It cross-checks against the WebRTC `connectionState` for the matching peer:
+
+- If the WebRTC layer also reports trouble (`disconnected`/`failed`), both signals corroborate and the client tears down the peer immediately.
+- If the WebRTC layer still reports `connected`, the hint is recorded but ignored. This protects working P2P calls when the signaling channel drops independently — server crash, mobile data → wifi switch, signaling-only firewall change. If the connection later goes unhealthy within ~30 s, the watchdog uses a shortened grace window because both signals now agree.
+
+This means a custom server is free to omit `#rtcio:peer-left`: the client's WebRTC-level liveness watchdog will still detect departed peers, just slower (~12 s vs ~2.5 s once the connection goes unhealthy). Wiring the hint is purely an optimisation.
 
 ## #rtcio:init-offer
 

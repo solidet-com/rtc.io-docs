@@ -55,6 +55,52 @@ If the network blips (Wi-Fi → cellular handoff, IP change), `iceConnectionStat
 
 If the restart fails (genuinely permanent loss), the connection eventually transitions to `closed` and *then* `peer-disconnect` fires.
 
+## How rtc.io decides a peer is gone
+
+A peer can disappear for many reasons — clean leave, tab close, OS sleep, NAT timeout, route change. rtc.io's job is to detect each of those without false-positives that kill working calls. There are two signals that feed the disconnect path:
+
+1. **WebRTC liveness** (authoritative). When `connectionState` becomes `disconnected` or `failed`, a per-peer **watchdog** is armed. If the connection hasn't returned to `connected` within a bounded grace window (~12 s by default), the peer is force-closed and `peer-disconnect` fires. This catches every form of departure that a browser can detect — abrupt tab close, OS suspend, route loss — independent of the signaling channel.
+
+2. **Server peer-left hint** (advisory). The signaling server emits `#rtcio:peer-left` to a leaving socket's rooms (the `rtc.io-server` does this for you in `addDefaultListeners`; you don't need to implement it). The library treats this as a *hint*, not an order. If the WebRTC layer also reports trouble, both signals agree and cleanup runs immediately. If the WebRTC layer says the peer is still connected, the hint is recorded but **does not** tear the peer down — your call survives a signaling-only outage (server crash, mobile data → wifi, signaling firewall change) without dropping P2P.
+
+   When a hint exists and the WebRTC layer later goes unhealthy, the watchdog uses a much shorter grace window (~2.5 s) — both signals corroborate that the peer is gone, so there's no point waiting through the longer window meant for transient ICE blips.
+
+The combined effect: tab-close detection in roughly 5–10 s end-to-end (browser-detected ICE drop + shortened watchdog), with no risk of tearing down a healthy P2P call when only signaling has dropped.
+
+```
+       ┌─────────────────────┐
+       │ connectionState =   │
+       │ 'disconnected'      ├────────► arm 12 s watchdog
+       │ or 'failed'         │
+       └─────────┬───────────┘
+                 │
+                 │      hint received within
+                 │      30 s of state change?
+                 │
+                 ▼
+       ┌─────────────────────┐
+       │ shorten watchdog    │
+       │ to 2.5 s            │
+       └─────────────────────┘
+
+       ┌─────────────────────┐
+       │ #rtcio:peer-left    │
+       │ from server         │
+       └─────────┬───────────┘
+                 │
+        WebRTC state currently...
+                 │
+        ┌────────┴────────┐
+        │                 │
+   unhealthy            healthy
+        │                 │
+   cleanup now      record hint;
+                    do NOT teardown
+                    (call stays alive)
+```
+
+You can lean on `peer-disconnect` as the single contract: it fires exactly when the library has decided the peer is gone for good. You don't need to listen to `user-disconnected` at the application layer for cleanup logic, though it remains available on `socket.server` for application-level concerns like presence rosters.
+
 ## The lower-level states
 
 If you want finer-grained UI (e.g. a "reconnecting…" badge), poll the connection state directly. rtc.io stores each peer's `RTCPeerConnection` on the peer entry:

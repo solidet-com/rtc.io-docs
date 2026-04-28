@@ -83,12 +83,13 @@ The full list:
 |---|---|---|---|
 | `#rtcio:init-offer` | server → client | socket.io | Tell an existing peer to initiate an offer to a newcomer |
 | `#rtcio:message` | bidirectional via server | socket.io | Multiplexed envelope for offers, answers, candidates, stream-meta |
+| `#rtcio:peer-left` | server → client | socket.io | Hint that a socket has disconnected; the client uses it to shorten its WebRTC liveness watchdog |
 | `#rtcio:offer` | reserved | — | Reserved for future use |
 | `#rtcio:answer` | reserved | — | Reserved for future use |
 | `#rtcio:candidate` | reserved | — | Reserved for future use |
 | `#rtcio:stream-meta` | reserved | — | Reserved for future use |
 
-`#rtcio:init-offer` and `#rtcio:message` are the two the library actually uses. The others exist as constants on `RtcioEvents` but aren't currently emitted; they're reserved so future protocol changes can use them without breaking apps that listen to those names.
+`#rtcio:init-offer`, `#rtcio:message` and `#rtcio:peer-left` are the three the library actually uses. The others exist as constants on `RtcioEvents` but aren't currently emitted; they're reserved so future protocol changes can use them without breaking apps that listen to those names.
 
 ## RtcioEvents constants
 
@@ -101,6 +102,7 @@ RtcioEvents.CANDIDATE;    // "#rtcio:candidate"
 RtcioEvents.MESSAGE;      // "#rtcio:message"
 RtcioEvents.STREAM_META;  // "#rtcio:stream-meta"
 RtcioEvents.INIT_OFFER;   // "#rtcio:init-offer"
+RtcioEvents.PEER_LEFT;    // "#rtcio:peer-left"
 ```
 
 Use these in server code instead of typing the strings:
