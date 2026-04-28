@@ -133,9 +133,14 @@ rtc.io deliberately *doesn't* own:
 
 Tuning streams is therefore mostly about **passing the right hints to the platform** — capture constraints, `contentHint`, `setParameters`. rtc.io exposes the underlying `RTCPeerConnection` via `socket.getPeer(peerId).connection` precisely so you have full access to the WebRTC stats and parameter APIs without rtc.io standing in the way.
 
-## A working snippet (used by the reference demo)
+## A worked snippet, end-to-end
 
-This is what `rtcio-web`'s screen share path runs end-to-end:
+The four knobs together. Treat this as a starting point — every value here is
+worth profiling against your own network and content type before you ship.
+The reference demo at [rtcio.dev](https://rtcio.dev) deliberately uses the
+plain `getDisplayMedia({ video: true, audio: true })` defaults so the path
+through the library matches what most apps will do on day one; reach for
+these knobs when you've got a concrete quality complaint to fix.
 
 ```ts
 const raw = await navigator.mediaDevices.getDisplayMedia({

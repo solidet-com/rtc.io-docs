@@ -62,6 +62,11 @@ function ActionButton({
   onClick?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
 }) {
+  // Both buttons use the surface-color background and the regular content
+  // color so they read on both light and dark themes. Primary is
+  // distinguished by a slightly darker / heavier border + bolder weight,
+  // not by a saturated fill — the bright accent fill we had before was
+  // unreadable in dark mode.
   const style: React.CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
@@ -69,15 +74,26 @@ function ActionButton({
     padding: '8px 14px',
     borderRadius: 8,
     fontSize: '0.85rem',
-    fontWeight: 600,
+    fontWeight: primary ? 600 : 500,
     textDecoration: 'none',
-    border: '1px solid var(--ifm-color-emphasis-300)',
-    background: primary
-      ? 'var(--ifm-color-primary)'
-      : 'var(--ifm-background-surface-color)',
-    color: primary ? 'var(--ifm-color-primary-contrast-foreground)' : 'var(--ifm-color-content)',
+    background: 'var(--ifm-background-surface-color)',
+    color: 'var(--ifm-color-content)',
+    border: `1px solid ${
+      primary ? 'var(--ifm-color-emphasis-500)' : 'var(--ifm-color-emphasis-300)'
+    }`,
     cursor: 'pointer',
     fontFamily: 'inherit',
+    transition: 'background .15s, border-color .15s',
+  };
+  const onEnter = (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.background = 'var(--ifm-color-emphasis-100)';
+    e.currentTarget.style.borderColor = 'var(--ifm-color-emphasis-600)';
+  };
+  const onLeave = (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.background = 'var(--ifm-background-surface-color)';
+    e.currentTarget.style.borderColor = primary
+      ? 'var(--ifm-color-emphasis-500)'
+      : 'var(--ifm-color-emphasis-300)';
   };
   if (href) {
     return (
@@ -86,6 +102,8 @@ function ActionButton({
         target="_blank"
         rel="noreferrer noopener"
         onClick={onClick}
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
         style={style}
       >
         {children}
@@ -93,7 +111,13 @@ function ActionButton({
     );
   }
   return (
-    <button type="button" onClick={onClick} style={style}>
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      style={style}
+    >
       {children}
     </button>
   );
