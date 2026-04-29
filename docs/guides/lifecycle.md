@@ -67,6 +67,8 @@ A peer can disappear for many reasons — clean leave, tab close, OS sleep, NAT 
 
 The combined effect: tab-close detection in roughly 5–10 s end-to-end (browser-detected ICE drop + shortened watchdog), with no risk of tearing down a healthy P2P call when only signaling has dropped.
 
+The 12 s and 2.5 s windows are defaults — tune them per socket via [`watchdog`](/docs/api/options#watchdog) (`timeout`, `hintTimeout`, `hintTTL`, all in milliseconds) if your network warrants longer NAT-rebind tolerance or you want faster cleanup.
+
 ```
        ┌─────────────────────┐
        │ connectionState =   │

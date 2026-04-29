@@ -146,7 +146,7 @@ You're done with the tutorial. You have:
 
 Where to from here:
 
-- **Want a richer demo?** [The rtcio-web source](https://github.com/solidet-com/rtc.io/tree/master/rtcio-web) is a complete React app with screen sharing, device pickers, mobile UI.
+- **Want a richer demo?** [The rtcio-web source](https://github.com/solidet-com/rtc.io/tree/main/rtcio-web) is a complete React app with screen sharing, device pickers, mobile UI.
 - **Want to understand more deeply?** Read [How it works](/docs/how-it-works) and [Perfect negotiation](/docs/guides/perfect-negotiation).
 - **Want to scale?** [Scaling](/docs/server/scaling) covers the Redis-adapter pattern.
 - **Stuck on something?** Open an issue on [GitHub](https://github.com/solidet-com/rtc.io/issues).

@@ -12,6 +12,10 @@ import StackBlitz from '@site/src/components/StackBlitz';
 
 [**rtc.io**](https://github.com/solidet-com/rtc.io) ([npm](https://www.npmjs.com/package/rtc.io)) is a WebRTC library for the browser, paired with a thin Node signaling server. It wraps the messy parts of `RTCPeerConnection` — perfect negotiation, ICE candidates, transceivers, DataChannel matching, glare resolution — behind an API that mirrors **socket.io**:
 
+:::note On the name
+`rtc.io` is the npm package name. The project lives at **[rtcio.dev](https://rtcio.dev)** (docs at [docs.rtcio.dev](https://docs.rtcio.dev), source on [GitHub](https://github.com/solidet-com/rtc.io)). The `rtc.io` web *domain* is an older, unrelated project we have no affiliation with.
+:::
+
 ```ts
 socket.emit("chat", "hello everyone");
 socket.on("chat", (msg) => console.log(msg));
@@ -83,17 +87,17 @@ import { minimalVideo } from '@site/src/examples';
 
 ## Try it without leaving this page
 
-Two browsers, eight lines of `rtc.io`, peer-to-peer audio + video. Click below to boot the project — open the StackBlitz preview URL in a second tab, grant camera/mic, and you'll see yourself.
+Two browsers, eight lines of `rtc.io`, peer-to-peer audio + video. Click below to boot the project, then hit the floating **Open 2nd tab ↗** button in the corner of the preview to spawn a second peer.
 
 <StackBlitz
   files={minimalVideo}
   template="node"
   file="src/main.ts"
   title="Minimal video call · 60 lines, runnable"
-  summary="Boots a Vite dev server inside the page and connects to server.rtcio.dev. Open the preview URL in two tabs to call yourself."
+  summary="Boots a Vite dev server inside the page and connects to server.rtcio.dev. Click 'Open 2nd tab ↗' inside the preview to call yourself."
 />
 
-For the whole reference app — chat, screen-share, file transfer, mobile UI, device pickers — see [rtcio.dev](https://rtcio.dev) (source on [GitHub](https://github.com/solidet-com/rtc.io/tree/master/rtcio-web)).
+For the whole reference app — chat, screen-share, file transfer, mobile UI, device pickers — see [rtcio.dev](https://rtcio.dev) (source on [GitHub](https://github.com/solidet-com/rtc.io/tree/main/rtcio-web)).
 
 ## Wire compatibility
 

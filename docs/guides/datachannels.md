@@ -187,7 +187,7 @@ For "should I emit on `socket` or on a custom channel" the practical answer is: 
 
 ## All four shapes, runnable
 
-Each embed below is a tiny self-contained app — open the preview URL in two browser tabs and you'll see the channel come up between them.
+Each embed below is a tiny self-contained app — click **Open 2nd tab ↗** inside the preview and you'll see the channel come up between the two tabs.
 
 ### Ordered, reliable broadcast — chat
 
@@ -206,7 +206,7 @@ Each embed below is a tiny self-contained app — open the preview URL in two br
   template="node"
   file="src/main.ts"
   title="socket.peer(id).emit / .on"
-  summary="Send to one peer, get a reply back. Open two tabs and click Ping."
+  summary="Send to one peer, get a reply back. Click 'Open 2nd tab ↗' inside the preview, then click Ping."
 />
 
 ### Per-peer with backpressure — file transfer

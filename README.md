@@ -7,6 +7,8 @@ Docusaurus 3 site for the [rtc.io](https://github.com/solidet-com/rtc.io) client
 
 > **Live**: [docs.rtcio.dev](https://docs.rtcio.dev) · **Library**: [rtc.io](https://github.com/solidet-com/rtc.io) · **Live demo**: [rtcio.dev](https://rtcio.dev)
 
+> `rtc.io` is the npm package name; the project's domain is **rtcio.dev**. The `rtc.io` web domain is an unrelated older project — not us.
+
 ---
 
 The "Edit this page" link at the bottom of every doc page points back to this repository, so PRs land in the right place without any monorepo gymnastics.

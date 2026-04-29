@@ -189,7 +189,7 @@ The classic shape: every peer's text shows up in every other peer's log.
   template="node"
   file="src/main.ts"
   title="Broadcast chat"
-  summary="A 30-line chat using one createChannel('chat'). Open in two tabs."
+  summary="A 30-line chat using one createChannel('chat'). Click 'Open 2nd tab ↗' inside the preview to chat with yourself."
 />
 
 ### Unordered, lossy — cursor sync

@@ -229,12 +229,12 @@ If you're seeing soft, low-frame-rate, or behind-real-time video — especially 
   template="node"
   file="src/main.ts"
   title="Minimal video call"
-  summary="Open the preview URL in two tabs to see the call connect peer-to-peer."
+  summary="Click 'Open 2nd tab ↗' inside the preview to see the call connect peer-to-peer."
 />
 
 ### Late-joiner replay in action
 
-Click **Share screen** in tab #1 *first*, then open the preview URL in tab #2. The second tab sees the share land instantly — even though it joined after the share started — because `socket.emit('screen', stream)` registered the stream for replay.
+Click **Share screen** in tab #1 *first*, then hit **Open 2nd tab ↗**. The second tab sees the share land instantly — even though it joined after the share started — because `socket.emit('screen', stream)` registered the stream for replay.
 
 <StackBlitz
   files={lateJoinerReplay}

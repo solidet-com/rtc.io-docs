@@ -8,7 +8,7 @@ import React from 'react';
  */
 export default function LiveDemoLink({
   blurb = 'See the full reference app — chat, screen-share, file transfer, password-protected rooms — running in a real browser tab.',
-  github = 'https://github.com/solidet-com/rtc.io/tree/master/rtcio-web',
+  github = 'https://github.com/solidet-com/rtc.io/tree/main/rtcio-web',
   href = 'https://rtcio.dev',
 }: {
   blurb?: React.ReactNode;
@@ -73,12 +73,12 @@ export default function LiveDemoLink({
             gap: 8,
             padding: '8px 14px',
             borderRadius: 8,
-            background: 'var(--ifm-color-primary)',
-            color: 'var(--ifm-color-primary-contrast-foreground)',
+            background: 'var(--ifm-background-surface-color)',
+            color: 'var(--ifm-color-content)',
             fontWeight: 600,
             fontSize: '0.88rem',
             textDecoration: 'none',
-            border: '1px solid var(--ifm-color-primary)',
+            border: '1px solid var(--ifm-color-emphasis-500)',
           }}
         >
           ▶ Open rtcio.dev
@@ -95,7 +95,7 @@ export default function LiveDemoLink({
             borderRadius: 8,
             background: 'var(--ifm-background-surface-color)',
             color: 'var(--ifm-color-content)',
-            fontWeight: 600,
+            fontWeight: 500,
             fontSize: '0.88rem',
             textDecoration: 'none',
             border: '1px solid var(--ifm-color-emphasis-300)',

@@ -201,7 +201,7 @@ The library calls this for you on every inbound stream when its peer disconnects
   template="node"
   file="src/main.ts"
   title="Minimal video"
-  summary="Open the preview URL in two tabs."
+  summary="Click 'Open 2nd tab ↗' inside the preview to bring a peer online."
 />
 
 ### Late-joiner replay + `untrackStream`

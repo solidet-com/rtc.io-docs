@@ -74,7 +74,59 @@ const TSCONFIG = JSON.stringify(
 ) + '\n';
 
 const SHARED_README = (title: string, body: string) =>
-  `# ${title}\n\n${body}\n\nOpen the preview URL in **two tabs** to see the two ends connect.\nUses the public signaling server at \`server.rtcio.dev\` — no setup required.\n`;
+  `# ${title}\n\n${body}\n\nClick **Open 2nd tab ↗** in the corner to spawn a second peer in the same room — that's what makes the demo do anything.\nUses the public signaling server at \`server.rtcio.dev\` — no setup required.\n`;
+
+const ROOM_HELPER = `/**
+ * Shared room + identity setup for the rtc.io docs examples.
+ *
+ * The URL describes the room you're in: \`?room=<uuid>\`. First tab mints one,
+ * any later tab inherits it from the URL. That keeps strangers out of the
+ * shared public-signaling demo while still letting you spawn a peer with one
+ * click — the floating "Open 2nd tab" button just opens \`location.href\` in
+ * a new tab, which means the same room id rides along.
+ */
+export function setupRoom(): { ROOM: string; NAME: string } {
+  const params = new URLSearchParams(location.search);
+  let ROOM = params.get('room');
+  if (!ROOM) {
+    ROOM = crypto.randomUUID();
+    history.replaceState(null, '', \`?room=\${ROOM}\`);
+  }
+  const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+
+  installOpenTabButton();
+  return { ROOM, NAME };
+}
+
+function installOpenTabButton() {
+  if (document.getElementById('rtcio-open-tab')) return;
+
+  const mount = () => {
+    if (document.getElementById('rtcio-open-tab')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'rtcio-open-tab';
+    wrap.style.cssText = [
+      'position:fixed', 'top:14px', 'right:14px', 'z-index:9999',
+      'display:flex', 'align-items:center', 'gap:8px',
+      'padding:8px 12px', 'background:rgba(10,9,8,.92)',
+      'border:1px solid var(--accent,#e5b082)', 'border-radius:10px',
+      'backdrop-filter:blur(6px)', 'font-family:inherit', 'font-size:13px',
+      'color:var(--fg,#f3ece0)', 'box-shadow:0 8px 24px rgba(0,0,0,.35)',
+    ].join(';');
+    wrap.innerHTML = \`
+      <span style="opacity:.8">Needs 2 tabs:</span>
+      <button type="button" style="font:inherit;background:var(--accent,#e5b082);color:#0a0908;border:none;padding:6px 12px;border-radius:6px;font-weight:600;cursor:pointer">Open 2nd tab ↗</button>
+    \`;
+    wrap.querySelector('button')!.addEventListener('click', () => {
+      window.open(location.href, '_blank', 'noopener');
+    });
+    document.body.appendChild(wrap);
+  };
+
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount, { once: true });
+}
+`;
 
 const SHARED_STYLE = `:root {
   --bg: #0a0908;
@@ -127,28 +179,25 @@ function shared(extraDeps: Record<string, string> = {}) {
     'vite.config.ts': VITE_CONFIG,
     'tsconfig.json': TSCONFIG,
     'src/styles.css': SHARED_STYLE,
+    'src/room.ts': ROOM_HELPER,
   };
 }
 
 // ─── 1. Minimal video call ──────────────────────────────────────────────────
 const minimalVideoMain = `import io, { RTCIOStream } from 'rtc.io';
+import { setupRoom } from './room';
 import './styles.css';
 
-// Hard-to-guess room id keeps strangers out of the demo on the shared
-// public server. First tab mints one; second tab inherits it from ?room=…
-const params = new URLSearchParams(location.search);
-let ROOM = params.get('room');
-if (!ROOM) {
-  ROOM = crypto.randomUUID();
-  history.replaceState(null, '', \`?room=\${ROOM}\`);
-}
-const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+// setupRoom() reads ?room=… from the URL or mints a fresh UUID, picks a
+// guest-XXXX display name, and renders the "Open 2nd tab" button in the
+// corner so you can spawn a peer in one click. See src/room.ts.
+const { ROOM, NAME } = setupRoom();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = \`
   <div class="card">
     <h1>Minimal video call · room <code>\${ROOM}</code></h1>
-    <p><small>Open this URL in another tab to see the call connect peer-to-peer.</small></p>
+    <p><small>Click <strong>Open 2nd tab ↗</strong> in the corner to spawn a peer.</small></p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <video id="local" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000;aspect-ratio:16/10"></video>
       <video id="remote" autoplay playsinline style="width:100%;border-radius:8px;background:#000;aspect-ratio:16/10"></video>
@@ -208,12 +257,10 @@ export const minimalVideo = {
 
 // ─── 2. Broadcast chat (no media) ───────────────────────────────────────────
 const broadcastChatMain = `import io from 'rtc.io';
+import { setupRoom } from './room';
 import './styles.css';
 
-const params = new URLSearchParams(location.search);
-let ROOM = params.get('room');
-if (!ROOM) { ROOM = crypto.randomUUID(); history.replaceState(null, '', \`?room=\${ROOM}\`); }
-const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+const { ROOM, NAME } = setupRoom();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = \`
@@ -225,7 +272,7 @@ app.innerHTML = \`
       <input id="msg" placeholder="say hi…" autocomplete="off" />
       <button type="submit">Send</button>
     </form>
-    <p style="margin-top:10px"><small>Joined as <code>\${NAME}</code> · open another tab to chat with yourself.</small></p>
+    <p style="margin-top:10px"><small>Joined as <code>\${NAME}</code> · click <strong>Open 2nd tab ↗</strong> to chat with yourself.</small></p>
   </div>\`;
 
 const log = document.getElementById('log')!;
@@ -293,12 +340,10 @@ export const broadcastChat = {
 
 // ─── 3. Per-peer messaging (RPC pattern) ────────────────────────────────────
 const perPeerRpcMain = `import io from 'rtc.io';
+import { setupRoom } from './room';
 import './styles.css';
 
-const params = new URLSearchParams(location.search);
-let ROOM = params.get('room');
-if (!ROOM) { ROOM = crypto.randomUUID(); history.replaceState(null, '', \`?room=\${ROOM}\`); }
-const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+const { ROOM, NAME } = setupRoom();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = \`
@@ -306,7 +351,7 @@ app.innerHTML = \`
     <h1>Per-peer messaging · room <code>\${ROOM}</code></h1>
     <p><small>RPC over <code>socket.peer(id).emit/on</code> — message goes to one peer, not all.</small></p>
     <div id="peers" style="display:flex;flex-direction:column;gap:8px"></div>
-    <p style="margin-top:10px"><small>You are <code>\${NAME}</code>. Open in two tabs.</small></p>
+    <p style="margin-top:10px"><small>You are <code>\${NAME}</code>. Click <strong>Open 2nd tab ↗</strong> to bring a peer online.</small></p>
   </div>\`;
 
 const peersBox = document.getElementById('peers')!;
@@ -373,12 +418,10 @@ export const perPeerRpc = {
 
 // ─── 4. File transfer with backpressure ─────────────────────────────────────
 const fileTransferMain = `import io, { RTCIOChannel } from 'rtc.io';
+import { setupRoom } from './room';
 import './styles.css';
 
-const params = new URLSearchParams(location.search);
-let ROOM = params.get('room');
-if (!ROOM) { ROOM = crypto.randomUUID(); history.replaceState(null, '', \`?room=\${ROOM}\`); }
-const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+const { ROOM, NAME } = setupRoom();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = \`
@@ -387,7 +430,7 @@ app.innerHTML = \`
     <p><small>Per-peer ordered DataChannel · respects backpressure via <code>send() === false</code> &amp; <code>'drain'</code>.</small></p>
     <input id="file" type="file" />
     <progress id="prog" max="100" value="0" style="width:100%;margin-top:10px;display:none"></progress>
-    <p id="status"><small>Open a second tab to bring a peer online.</small></p>
+    <p id="status"><small>Click <strong>Open 2nd tab ↗</strong> to bring a peer online.</small></p>
     <div id="received" style="margin-top:14px;display:flex;flex-direction:column;gap:8px"></div>
     <p style="margin-top:10px"><small>You are <code>\${NAME}</code>.</small></p>
   </div>\`;
@@ -452,7 +495,7 @@ fileInput.addEventListener('change', async () => {
   const file = fileInput.files?.[0];
   if (!file) return;
   if (channels.size === 0) {
-    alert('No peers connected — open this URL in another tab first.');
+    alert('No peers connected — click "Open 2nd tab ↗" first.');
     return;
   }
   prog.style.display = 'block';
@@ -499,19 +542,17 @@ export const fileTransfer = {
 
 // ─── 5. Late-joiner stream replay ───────────────────────────────────────────
 const lateJoinerMain = `import io, { RTCIOStream } from 'rtc.io';
+import { setupRoom } from './room';
 import './styles.css';
 
-const params = new URLSearchParams(location.search);
-let ROOM = params.get('room');
-if (!ROOM) { ROOM = crypto.randomUUID(); history.replaceState(null, '', \`?room=\${ROOM}\`); }
-const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+const { ROOM, NAME } = setupRoom();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = \`
   <div class="card">
     <h1>Late-joiner stream replay · room <code>\${ROOM}</code></h1>
     <p>
-      <small>Click <strong>Share screen</strong> in tab #1, then open this URL in tab #2.<br>
+      <small>Click <strong>Share screen</strong> in tab #1, then hit <strong>Open 2nd tab ↗</strong>.<br>
       Tab #2 sees the screen share immediately even though it joined late — the library
       replays registered streams to every new peer.</small>
     </p>
@@ -581,12 +622,10 @@ export const lateJoinerReplay = {
 
 // ─── 6. Unordered, lossy DataChannel (game state) ───────────────────────────
 const unorderedChannelMain = `import io, { type RTCIOBroadcastChannel } from 'rtc.io';
+import { setupRoom } from './room';
 import './styles.css';
 
-const params = new URLSearchParams(location.search);
-let ROOM = params.get('room');
-if (!ROOM) { ROOM = crypto.randomUUID(); history.replaceState(null, '', \`?room=\${ROOM}\`); }
-const NAME = \`guest-\${Math.random().toString(36).slice(2, 6)}\`;
+const { ROOM, NAME } = setupRoom();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = \`

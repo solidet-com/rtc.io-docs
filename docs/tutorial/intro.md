@@ -50,7 +50,7 @@ For brevity we use vanilla DOM in the snippets (`document.getElementById`, `srcO
 
 ## Skipping ahead
 
-If you've used WebRTC libraries before and just want a working starting point, [the demo source on GitHub](https://github.com/solidet-com/rtc.io/tree/master/rtcio-web) is a complete React app — closer to what you'd actually ship. It uses the same APIs this tutorial covers, plus production niceties (mobile UI, password-protected rooms, device pickers) that are out of scope here.
+If you've used WebRTC libraries before and just want a working starting point, [the demo source on GitHub](https://github.com/solidet-com/rtc.io/tree/main/rtcio-web) is a complete React app — closer to what you'd actually ship. It uses the same APIs this tutorial covers, plus production niceties (mobile UI, password-protected rooms, device pickers) that are out of scope here.
 
 <LiveDemoLink
   blurb="A complete React + Vite app built on rtc.io — the production-shaped version of what this tutorial walks through. Opens in a real tab so camera, mic, screen-share and fullscreen all behave the way they would in your own app."

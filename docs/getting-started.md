@@ -171,7 +171,7 @@ Same room, no React, no router, no production polish — just `getUserMedia` and
   template="node"
   file="src/main.ts"
   title="Minimal video · src/main.ts"
-  summary="Eight lines of rtc.io plus two <video> elements. Open the StackBlitz preview URL in two tabs to call yourself."
+  summary="Eight lines of rtc.io plus two <video> elements. Click 'Open 2nd tab ↗' inside the preview to call yourself."
 />
 
 ## A non-media broadcast channel
@@ -195,5 +195,5 @@ If you only need a peer-to-peer chat, presence indicator, or shared whiteboard s
 - **[Server quickstart](server/quickstart)** — when you outgrow the public server.
 
 :::tip Working with a coding assistant?
-The library repo ships an [`AGENTS.md`](https://github.com/solidet-com/rtc.io/blob/master/AGENTS.md) — a single-file primer that documents the API, the patterns, and the common pitfalls in a form a language model can absorb in one read. Hand it over and your assistant will stop guessing at the API.
+The library repo ships an [`AGENTS.md`](https://github.com/solidet-com/rtc.io/blob/main/AGENTS.md) — a single-file primer that documents the API, the patterns, and the common pitfalls in a form a language model can absorb in one read. Hand it over and your assistant will stop guessing at the API.
 :::

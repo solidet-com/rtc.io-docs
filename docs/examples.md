@@ -20,7 +20,7 @@ import {
 
 Six self-contained projects, one per concept. Each shows the source inline so you can scan it without leaving the page; click **Run live** on any of them to open it in a real StackBlitz tab — that's where camera/mic prompts, fullscreen, and the like work properly.
 
-All examples connect to the public signaling server at [`server.rtcio.dev`](server/public-server). Open the StackBlitz preview in **two tabs** to see the two ends connect.
+All examples connect to the public signaling server at [`server.rtcio.dev`](server/public-server). Each preview ships with an **Open 2nd tab ↗** button in the corner — one click spawns a second peer in the same room, so you can actually see the two ends connect without copy-pasting URLs.
 
 ## 1 · Minimal video call
 
@@ -55,7 +55,7 @@ If you only need a peer-to-peer chat, presence indicator, or shared whiteboard s
   template="node"
   file="src/main.ts"
   title="Per-peer ping/pong"
-  summary="Open in two tabs, click 'Ping' on each peer row. Reply round-trips over the same per-peer ctrl DataChannel."
+  summary="Click 'Open 2nd tab ↗', then click 'Ping' on each peer row. Reply round-trips over the same per-peer ctrl DataChannel."
 />
 
 ## 4 · File transfer with backpressure
@@ -79,7 +79,7 @@ Custom per-peer ordered DataChannel + 16 KB chunks + the `send()` / `'drain'` fl
   template="node"
   file="src/main.ts"
   title="Screen share that survives a late joiner"
-  summary="Click 'Share screen' in tab #1 first, THEN open tab #2 — the share lands immediately, even though it started before the second tab connected."
+  summary="Click 'Share screen' in tab #1 first, THEN hit 'Open 2nd tab ↗' — the share lands immediately, even though it started before tab #2 connected."
 />
 
 ## 6 · Unordered, lossy DataChannel (cursor sync)

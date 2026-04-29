@@ -85,7 +85,7 @@ const config: Config = {
           // Docs live in their own repository (solidet-com/rtc.io-docs).
           // The "Edit this page" link goes there directly so contributors land
           // on the right tree without a docs/ prefix.
-          editUrl: 'https://github.com/solidet-com/rtc.io-docs/edit/master/',
+          editUrl: 'https://github.com/solidet-com/rtc.io-docs/edit/main/',
         },
         blog: false,
         theme: {

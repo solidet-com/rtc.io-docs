@@ -16,6 +16,11 @@ Passed to `io(url, options)`. Extends socket.io-client's `SocketOptions`, so any
 interface SocketOptions extends Partial<RootSocketOptions> {
   iceServers: RTCIceServer[];
   debug?: boolean;
+  watchdog?: {
+    timeout?: number;       // ms
+    hintTimeout?: number;   // ms
+    hintTTL?: number;       // ms
+  };
 }
 ```
 
@@ -55,6 +60,37 @@ Lines look like:
 ```
 
 The 6-character tag is the last 6 of `socket.id`.
+
+### `watchdog`
+
+```ts
+watchdog?: {
+  timeout?: number;       // ms · default 12_000
+  hintTimeout?: number;   // ms · default 2_500
+  hintTTL?: number;       // ms · default 30_000
+}
+```
+
+Tunes the per-peer liveness watchdog that decides when an unhealthy WebRTC connection should be torn down. **All three fields are in milliseconds.** See [Lifecycle](/docs/guides/lifecycle) for the full state machine.
+
+- **`timeout`** *(ms)* — how long to wait after `connectionState` flips to `disconnected`/`failed` before declaring the peer dead. Larger values tolerate longer NAT rebinds, mobile network handoffs, and ICE restarts; smaller values free resources sooner at the risk of tearing down recoverable peers.
+- **`hintTimeout`** *(ms)* — the shorter grace window used when the server-side `peer-left` hint corroborates the disconnect within `hintTTL`. Set this equal to `timeout` to ignore the hint entirely.
+- **`hintTTL`** *(ms)* — how long a fresh `peer-left` hint stays "fresh" enough to shorten the watchdog. Beyond this window the hint is ignored. Set to `0` to never use the shortened path.
+
+Each field is independent; omit one to keep its default.
+
+```ts
+const socket = io(URL, {
+  iceServers: [...],
+  watchdog: {
+    timeout: 30_000,       // ms — tolerate longer mobile network blips
+    hintTimeout: 5_000,    // ms — still trust server hints, but a bit looser
+    hintTTL: 60_000,       // ms — accept hints from up to a minute ago
+  },
+});
+```
+
+Negative values, `NaN`, and non-numeric inputs are silently ignored — the documented default is used in their place.
 
 ### Inherited from socket.io-client
 
@@ -156,6 +192,9 @@ For most apps the 1 MB default is fine. Raise it for big single-file transfers; 
 |---|---|
 | `iceServers` | Google STUN (1 + 2) |
 | `debug` | `false` |
+| `watchdog.timeout` | `12_000` ms |
+| `watchdog.hintTimeout` | `2_500` ms |
+| `watchdog.hintTTL` | `30_000` ms |
 | `ordered` | `true` |
 | `maxRetransmits` | unlimited (no cap) |
 | `maxPacketLifeTime` | unlimited |

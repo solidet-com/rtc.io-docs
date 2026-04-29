@@ -128,7 +128,7 @@ Calling `createChannel("file")` again is idempotent — you get back the same ch
 
 ## Live example
 
-A simple ping/pong RPC. `socket.peer(id).emit('ping', ...)` sends to one peer; the receiver replies via `socket.peer(payload.from).emit('pong', ...)`. Open in two tabs and click each peer's **Ping** button.
+A simple ping/pong RPC. `socket.peer(id).emit('ping', ...)` sends to one peer; the receiver replies via `socket.peer(payload.from).emit('pong', ...)`. Click **Open 2nd tab ↗** inside the preview, then click each peer's **Ping** button.
 
 <StackBlitz
   files={perPeerRpc}
