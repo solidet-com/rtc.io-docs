@@ -118,6 +118,8 @@ interface ChannelOptions {
   maxRetransmits?: number;
   maxPacketLifeTime?: number;
   queueBudget?: number;
+  highWatermark?: number;
+  lowWatermark?: number;
 }
 ```
 
@@ -186,6 +188,53 @@ const file = socket.peer(id).createChannel("file", {
 
 For most apps the 1 MB default is fine. Raise it for big single-file transfers; lower it if you're tight on memory and want immediate backpressure.
 
+### `highWatermark`
+
+```ts
+highWatermark?: number    // default 16 MB (16_777_216)
+```
+
+The `bufferedAmount` threshold above which the channel is considered *full*. While `bufferedAmount ≥ highWatermark`, `channel.send()` returns `false` and your bytes are held in the JS queue (subject to `queueBudget`) until the browser drains the transport.
+
+Lower it to cap the OS-side transport buffer — less memory, lower steady-state end-to-end latency, but throughput on bursty writes drops because you spend more time in the pause/drain cycle. Raise it for high-bandwidth fat-pipe links (gigabit LAN, server-to-server) where you want a deeper pipeline and the memory is available.
+
+```ts
+// Embedded / low-RAM peer: keep the transport buffer small.
+const tight = socket.peer(id).createChannel("file", {
+  highWatermark: 2 * 1024 * 1024,    // 2 MB
+});
+
+// Bulk transfer over LAN: fill the pipe.
+const bulk = socket.peer(id).createChannel("bulk", {
+  highWatermark: 64 * 1024 * 1024,   // 64 MB
+});
+```
+
+This is **library state**; it gates `send()`'s `true`/`false` return and the internal `_flush` loop. It's not passed to `RTCDataChannel` — the browser doesn't expose a high-water threshold as a constructor option (only the low-water `bufferedAmountLowThreshold`, which `lowWatermark` sets).
+
+### `lowWatermark`
+
+```ts
+lowWatermark?: number    // default 1 MB (1_048_576)
+```
+
+The `bufferedAmount` value that re-arms the `'drain'` event. Once `bufferedAmount` rises above `highWatermark` and then falls back through `lowWatermark`, the browser fires `bufferedamountlow` and rtc.io fires `'drain'` on your channel — your `await channel.once('drain', ...)` resolves and you can resume sending.
+
+This value is forwarded to `RTCDataChannel.bufferedAmountLowThreshold`, so it directly controls when the platform notifies us.
+
+- **Higher `lowWatermark`** → drain fires earlier, sender resumes sooner, smoother throughput, the transport buffer stays fuller on average (more memory, more steady-state queueing latency).
+- **Lower `lowWatermark`** → drain fires later, sender resumes after a deeper drain. Burstier but the buffer empties more between bursts.
+
+```ts
+// Smoother streaming: resume as soon as we've cleared 4 MB worth of buffer.
+const live = socket.peer(id).createChannel("live", {
+  highWatermark: 16 * 1024 * 1024,
+  lowWatermark:   4 * 1024 * 1024,
+});
+```
+
+**Constraints**: `lowWatermark` must be lower than `highWatermark` — if it isn't, the browser will fire `bufferedamountlow` immediately on every send and drain spam will defeat the throttling. The library doesn't enforce this for you. The default 1 MB / 16 MB ratio is a good starting point; tune the ratio rather than the absolute numbers unless you know what you're targeting.
+
 ## Defaults at a glance
 
 | Option | Default |
@@ -199,6 +248,8 @@ For most apps the 1 MB default is fine. Raise it for big single-file transfers; 
 | `maxRetransmits` | unlimited (no cap) |
 | `maxPacketLifeTime` | unlimited |
 | `queueBudget` | 1 MB |
+| `highWatermark` | 16 MB |
+| `lowWatermark` | 1 MB |
 
 ## Worked recipes
 
@@ -226,6 +277,27 @@ const g = socket.createChannel("input", { ordered: false, maxPacketLifeTime: 50 
 const f = socket.peer(id).createChannel("file", {
   ordered: true,
   queueBudget: 16 * 1024 * 1024,
+});
+```
+
+**High-bandwidth LAN bulk transfer (deeper pipeline):**
+
+```ts
+const bulk = socket.peer(id).createChannel("bulk", {
+  ordered: true,
+  queueBudget:    64 * 1024 * 1024,   // 64 MB — held in JS until DC accepts
+  highWatermark:  64 * 1024 * 1024,   // 64 MB — pause threshold
+  lowWatermark:   16 * 1024 * 1024,   // 16 MB — resume threshold
+});
+```
+
+**Low-memory / latency-sensitive channel (tight throttling):**
+
+```ts
+const tight = socket.peer(id).createChannel("ctrl-stream", {
+  ordered: true,
+  highWatermark: 1 * 1024 * 1024,     // 1 MB — pause early
+  lowWatermark:  256 * 1024,          // 256 KB — drain almost fully before resuming
 });
 ```
 

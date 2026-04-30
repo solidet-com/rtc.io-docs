@@ -213,15 +213,22 @@ const socket = io('https://server.rtcio.dev', {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 });
 
-socket.server.emit('join-room', { roomId: ROOM, name: NAME });
-
+// Ask for camera/mic *before* joining. If a peer joins while we're still
+// on the browser permission prompt, they'd see us as "in the room" with
+// no stream attached — they get media only once we accept the prompt.
 const local = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 localEl.srcObject = local;
-socket.emit('camera', new RTCIOStream(local));
+const camera = new RTCIOStream(local);
 
-socket.on('camera', (remote: RTCIOStream) => {
-  remoteEl.srcObject = remote.mediaStream;
-  status.innerHTML = '<small>Connected · streaming P2P</small>';
+socket.server.emit('join-room', { roomId: ROOM, name: NAME });
+
+// You can ship app metadata alongside the stream — the library walks args
+// looking for any RTCIOStream and preserves the rest of the shape verbatim.
+socket.emit('camera', { stream: camera, metadata: { displayName: NAME } });
+
+socket.on('camera', (payload: { stream: RTCIOStream; metadata: { displayName: string } }) => {
+  remoteEl.srcObject = payload.stream.mediaStream;
+  status.innerHTML = \`<small>Connected · streaming P2P from \${payload.metadata.displayName}</small>\`;
 });
 
 socket.on('peer-connect', ({ id }) => console.log('peer joined', id));

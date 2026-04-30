@@ -147,6 +147,36 @@ socket.peer(targetId).emit("private-cam", new RTCIOStream(localMedia));
 
 This skips the replay registry — only that peer gets it, and late joiners don't.
 
+## Attaching metadata to a stream
+
+The `RTCIOStream` doesn't have to be the *only* arg. The library deep-walks the payload, swaps each `RTCIOStream` for its wire token (`"[RTCIOStream] <id>"`), and reconstructs the original shape on the receive side — so anything else you put in the payload (object, array, primitive) rides along verbatim. Use this to ship the display name, the kind of stream, the source app, whatever the receiver needs to render the tile correctly:
+
+```ts
+socket.emit("stream", {
+  screen: new RTCIOStream(displayStream),
+  metadata: { userId: "abc123", displayName: "Alice", kind: "screen" },
+});
+```
+
+```ts
+socket.on("stream", (payload: {
+  screen: RTCIOStream;
+  metadata: { userId: string; displayName: string; kind: "camera" | "screen" };
+}) => {
+  video.srcObject = payload.screen.mediaStream;
+  label.textContent = payload.metadata.displayName;
+  console.log("from", payload.metadata.userId);
+});
+```
+
+The metadata is stored *with* the stream in the replay registry, so a peer who joins later receives the same `{ screen, metadata }` payload without you doing anything. Update by emitting again with the same `RTCIOStream` instance and a fresh metadata object — the registry overwrites by stream id.
+
+A few rules:
+
+- **Only `RTCIOStream` instances are detected**, not bare `MediaStream`. A `MediaStream` in the payload JSON-serialises to `{}` and the receiver gets nothing.
+- **The wrapper instance must be stable.** Hold one `RTCIOStream` per underlying media for the whole session — a fresh wrapper on every emit creates a new stream id and registers a duplicate.
+- **Don't put functions, class instances (other than `RTCIOStream`), or non-JSON values in the metadata.** The payload goes through `JSON.stringify` once the stream tokens are swapped in.
+
 ## Receiving an RTCIOStream
 
 The receive side handler shape mirrors the emit:

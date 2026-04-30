@@ -54,20 +54,50 @@ Three things happen the moment you call `socket.emit("camera", myCamera)`:
 
 When the remote browser receives the resulting tracks, it fires `ontrack`. rtc.io looks up which `RTCIOStream` they belong to (via a `mid` lookup using a small handshake — see the `stream-meta` payload in [How it works](/docs/how-it-works)) and dispatches your `socket.on("camera", ...)` handlers with the wrapped stream.
 
-You can attach extra fields to the emit:
+## Attaching metadata to a stream
+
+The `RTCIOStream` doesn't have to be the only arg. `socket.emit` deep-walks the payload looking for any `RTCIOStream`; the rest of the object/array shape is preserved verbatim across the wire. Use this to ship app-level metadata (display name, the kind of stream, the source app) alongside the stream — no second ctrl emit needed:
 
 ```ts
-socket.emit("camera", { id: socket.id, name: "alice", camera: myCamera });
-```
+// ✅ The library finds the RTCIOStream nested inside the payload
+socket.emit("stream", {
+  screen: new RTCIOStream(displayStream),
+  metadata: { userId: "abc123", displayName: "Alice", kind: "screen" },
+});
 
-The library walks the args looking for any `RTCIOStream` instance (deep search), so the receiving side gets the same object shape:
-
-```ts
-socket.on("camera", ({ id, name, camera }) => {
-  videoEl.srcObject = camera.mediaStream;
-  label.textContent = name;
+// Receive side mirrors the emitted shape
+socket.on("stream", (payload: {
+  screen: RTCIOStream;
+  metadata: { userId: string; displayName: string; kind: "camera" | "screen" };
+}) => {
+  video.srcObject = payload.screen.mediaStream;
+  label.textContent = payload.metadata.displayName;
 });
 ```
+
+The metadata is stored alongside the stream in the replay registry, so a late joiner receives the same `{ screen, metadata }` payload they would have received if they'd been there from the start. Re-emit with the same `RTCIOStream` instance and fresh metadata to update — the registry overwrites by stream id.
+
+Things to keep in mind:
+
+- **Only `RTCIOStream` instances are detected**, not bare `MediaStream` — a `MediaStream` JSON-serialises to `{}` and the receiver gets nothing.
+- **Hold the wrapper stable.** One `RTCIOStream` per underlying media for the whole session; a fresh wrapper on every emit creates a new stream id and registers a duplicate.
+- **JSON-safe metadata only.** Once the stream tokens are swapped in, the payload goes through `JSON.stringify`. Functions and class instances (other than `RTCIOStream` itself) won't survive the trip.
+
+## Ask for permission *before* `join-room`
+
+Order the user-facing flow as **getUserMedia → join-room → emit**, not the other way around:
+
+```ts
+// ✅ permission first, then join, then emit
+const local = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+const camera = new RTCIOStream(local);
+socket.server.emit("join-room", { roomId, name });
+socket.on("peer-connect", () => socket.emit("camera", camera));
+```
+
+If you `join-room` first, a peer who joins while you're still sitting on the browser's permission prompt sees you as already in the room but with no stream attached — they render an empty tile and only see your camera once you accept the prompt (which can be tens of seconds later, or never if the user rejects). Asking for permission up-front gives you a stream you can `emit` the moment a peer connects, so newcomers see media immediately.
+
+(For apps where the user might join the room and *then* opt into camera — voice-only fallback, lobby UI, etc. — that's fine too; just be aware that the empty-tile state is on you to render. The library will deliver the stream whenever you `emit` it.)
 
 ## Late joiners
 

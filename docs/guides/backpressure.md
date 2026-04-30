@@ -15,12 +15,30 @@ The standard fix is to back off when `bufferedAmount` gets high, and resume when
 
 ## The two watermarks
 
-```ts title="channel.ts"
+```ts title="channel.ts (defaults)"
 export const HIGH_WATERMARK = 16_777_216;  // 16 MB — pause sending above this
 export const LOW_WATERMARK  =  1_048_576;  //  1 MB — resume sending below this
 ```
 
-These are tied to `RTCDataChannel.bufferedAmountLowThreshold`. When `bufferedAmount` falls back through `LOW_WATERMARK`, the browser fires `bufferedamountlow`, and rtc.io emits `'drain'` on your channel.
+When `bufferedAmount ≥ HIGH_WATERMARK`, `channel.send()` returns `false` and your bytes are held in the JS-side queue. When `bufferedAmount` falls back through `LOW_WATERMARK`, the browser fires `bufferedamountlow` (driven by `RTCDataChannel.bufferedAmountLowThreshold`, which the library sets to the channel's `lowWatermark`) and rtc.io emits `'drain'` on your channel.
+
+Both are configurable per-channel via `ChannelOptions` if the defaults don't fit your shape:
+
+```ts
+const live = socket.peer(id).createChannel("live", {
+  highWatermark: 8 * 1024 * 1024,   // pause once 8 MB are in flight
+  lowWatermark:  2 * 1024 * 1024,   // resume once it's back under 2 MB
+});
+```
+
+When to tune them:
+
+- **Lower `highWatermark`** caps the OS-side transport buffer. Less memory pressure and shorter steady-state end-to-end latency, at the cost of throughput on bursty senders (you spend more time pausing).
+- **Higher `highWatermark`** lets the browser hold more bytes in flight — useful on high-bandwidth fat-pipe links (gigabit LAN, server-to-server) where you want a deeper pipeline and the memory's available.
+- **Higher `lowWatermark`** fires `'drain'` sooner, so the sender resumes earlier — smoother throughput, fuller transport buffer on average.
+- **Lower `lowWatermark`** fires `'drain'` later, after a deeper drain — burstier throughput, more headroom between bursts.
+
+`lowWatermark` must stay below `highWatermark`; otherwise drain fires immediately on every send and the throttling collapses. The library doesn't enforce this — it's on you. Tune the ratio (1:16 by default) before tuning the absolute numbers.
 
 ## The queue budget
 
@@ -53,7 +71,7 @@ const ok = channel.send(arrayBuffer);
 - **`true`** — sent immediately. Channel is open and below high-water.
 - **`false`** — queued (or refused). One of:
   - Channel is still `connecting` — buffered, will flush on `'open'`.
-  - `bufferedAmount` ≥ `HIGH_WATERMARK` — back off until `'drain'`.
+  - `bufferedAmount` ≥ the channel's `highWatermark` — back off until `'drain'`.
   - There's already a queue — your send is appended to it.
   - Queue budget exceeded — `'error'` fires, no buffering happened.
 
@@ -82,7 +100,7 @@ async function streamFile(channel, file) {
 }
 ```
 
-`once("drain")` resolves the next time `bufferedAmount` falls through `LOW_WATERMARK`. The `send`-then-await-drain loop is the simplest correct pattern for streaming a file or any large blob.
+`once("drain")` resolves the next time `bufferedAmount` falls through the channel's `lowWatermark` (1 MB by default). The `send`-then-await-drain loop is the simplest correct pattern for streaming a file or any large blob.
 
 ## Picking a chunk size
 
@@ -142,7 +160,7 @@ The bundled file-transfer helper in our [tutorial](/docs/tutorial/files) does ex
 console.log(channel.readyState, channel.bufferedAmount);
 ```
 
-If you see it pinned near `HIGH_WATERMARK` for long stretches, your sender is faster than the link. Either chunk smaller, throttle the producer, or accept the existing rtc.io pause/drain cycle.
+If you see it pinned near the channel's `highWatermark` for long stretches, your sender is faster than the link. Either chunk smaller, throttle the producer, accept the existing rtc.io pause/drain cycle, or raise `highWatermark` if you have memory headroom and want a deeper pipeline.
 
 If `bufferedAmount` is consistently zero and you're still seeing slowness, the bottleneck is on the wire (cellular, congested router) or in receive-side processing — not in your sender.
 

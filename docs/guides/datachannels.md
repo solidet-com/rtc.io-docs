@@ -131,7 +131,9 @@ Both sides run this, so both sides create the channel with the same hash id. The
 | `ordered` | `true` | In-order delivery. Set `false` to allow lower-latency, possibly out-of-order delivery (good for interactive things like cursor positions). |
 | `maxRetransmits` | unlimited | Number of retransmission attempts before giving up on a packet. Mutually exclusive with `maxPacketLifeTime`. |
 | `maxPacketLifeTime` | unlimited | Maximum ms to keep retrying a packet. Mutually exclusive with `maxRetransmits`. |
-| `queueBudget` | 1 MB | Library-side cap on bytes buffered *before* the channel is open. Not passed to `RTCDataChannel`. |
+| `queueBudget` | 1 MB | Library-side cap on bytes buffered *before* the channel is open (or while above the high watermark). Not passed to `RTCDataChannel`. |
+| `highWatermark` | 16 MB | `bufferedAmount` threshold above which `send()` returns `false` and the library queues. Library-only; the browser doesn't expose this as a constructor option. |
+| `lowWatermark` | 1 MB | `bufferedAmount` value at which `'drain'` fires. Forwarded to `RTCDataChannel.bufferedAmountLowThreshold`. Must be < `highWatermark`. |
 
 `maxRetransmits` and `maxPacketLifeTime` are mutually exclusive — if both are set the browser ignores one. Use one or the other for unreliable channels.
 

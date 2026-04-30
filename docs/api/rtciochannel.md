@@ -70,7 +70,7 @@ Three special event names are dispatched by the library itself:
 | `close` | none | Channel closed (peer left, you called close, transport died) |
 | `error` | `(err)` | Channel error or queue-budget overrun |
 | `data` | `(buf: ArrayBuffer | string)` | Raw payload arrived (from `send`, not `emit`) |
-| `drain` | none | `bufferedAmount` fell below `LOW_WATERMARK` (1 MB) |
+| `drain` | none | `bufferedAmount` fell below `lowWatermark` (1 MB by default; configurable via `ChannelOptions`) |
 
 Plus any event name you've `emit`ed: `ch.emit("chat", msg)` → `ch.on("chat", (msg) => ...)`.
 
@@ -95,14 +95,16 @@ Live property. Mirrors `RTCDataChannel.readyState`; if the channel hasn't been a
 
 ### `bufferedAmount: number`
 
-Live property. Mirrors `RTCDataChannel.bufferedAmount` — bytes queued in the browser's transport, not yet sent. Use this with the watermark constants if you're implementing your own throttling:
+Live property. Mirrors `RTCDataChannel.bufferedAmount` — bytes queued in the browser's transport, not yet sent. Use this if you're implementing your own throttling on top of (or instead of) the built-in watermark/drain pattern:
 
 ```ts
-const HIGH_WATERMARK = 16_777_216;
-if (ch.bufferedAmount > HIGH_WATERMARK) {
+const PAUSE_AT = 16 * 1024 * 1024;   // matches the default highWatermark
+if (ch.bufferedAmount > PAUSE_AT) {
   // back off
 }
 ```
+
+The defaults are `highWatermark: 16 MB` and `lowWatermark: 1 MB`; both are overridable per-channel via [`ChannelOptions`](options#channeloptions).
 
 ## Closing
 
@@ -116,25 +118,27 @@ Closes the underlying `RTCDataChannel` and clears any queued payloads. Fires `cl
 
 If the channel is already in `closing` or `closed` state, this is a no-op.
 
-## Watermarks (constants)
+## Watermarks and queue budget
 
-The library exports the following constants for reference:
+Three knobs govern how much the channel will buffer before refusing or draining:
 
-```ts
-HIGH_WATERMARK = 16 * 1024 * 1024  // 16 MB — set as bufferedAmount threshold
-LOW_WATERMARK  =  1 * 1024 * 1024  //  1 MB — bufferedAmountLowThreshold
-QUEUE_BUDGET   =  1 * 1024 * 1024  //  1 MB — default JS queue budget
-```
+| Default | Option | Role |
+|---|---|---|
+| 16 MB | `highWatermark` | `bufferedAmount` ≥ this → `send()` returns `false` and the library queues your bytes. |
+| 1 MB | `lowWatermark` | `bufferedAmount` falls back through this → `'drain'` fires. Forwarded to `RTCDataChannel.bufferedAmountLowThreshold`. |
+| 1 MB | `queueBudget` | Hard cap on the JS-side queue (held while the channel is connecting or while above the high watermark). Exceeding fires `'error'`. |
 
-The first two control when `send` returns false vs true. The third controls how many bytes can sit in the JS queue (queued *before* the channel opens, or queued because `bufferedAmount` is high).
-
-You can override `QUEUE_BUDGET` per-channel:
+All three are configurable per-channel:
 
 ```ts
 const ch = socket.peer(id).createChannel("file", {
-  queueBudget: 32 * 1024 * 1024,   // 32 MB
+  queueBudget:    32 * 1024 * 1024,   // 32 MB held in JS until the DC accepts
+  highWatermark:  32 * 1024 * 1024,   // pause threshold matched to budget
+  lowWatermark:    8 * 1024 * 1024,   // drain fires at 8 MB
 });
 ```
+
+Keep `lowWatermark` below `highWatermark` — otherwise the `bufferedamountlow` event fires immediately on every send and the throttling collapses. See [Backpressure & flow control](/docs/guides/backpressure) and [`ChannelOptions`](options#channeloptions) for the tuning guide.
 
 ## Internal: `_attach(dc)` / `_isAttached()`
 

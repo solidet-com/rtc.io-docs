@@ -58,17 +58,21 @@ const socket = io("https://server.rtcio.dev", {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 });
 
-socket.server.emit("join-room", { roomId: "demo", name: "alice" });
-
-// Local camera/mic.
+// Local camera/mic — ask for permission *before* joining the room so that
+// a peer who joins during the browser prompt doesn't see you with an empty
+// tile until you accept.
 const local = await navigator.mediaDevices.getUserMedia({
   video: true, audio: true,
 });
-socket.emit("camera", new RTCIOStream(local));
+const camera = new RTCIOStream(local);
 
-// Remote camera.
-socket.on("camera", (remote) => {
-  document.querySelector("video.remote").srcObject = remote.mediaStream;
+socket.server.emit("join-room", { roomId: "demo", name: "alice" });
+socket.emit("camera", { stream: camera, metadata: { displayName: "Alice" } });
+
+// Remote camera. Metadata you put alongside the stream rides through verbatim.
+socket.on("camera", ({ stream, metadata }) => {
+  document.querySelector("video.remote").srcObject = stream.mediaStream;
+  label.textContent = metadata.displayName;
 });
 
 // Chat.
