@@ -63,13 +63,6 @@ export default function Home() {
               Try the demo &rarr;
             </Link>
           </div>
-          <ul className="hero--rtcio__pills">
-            <li>MIT licensed</li>
-            <li>Zero SDP code</li>
-            <li>Late-joiner replay</li>
-            <li>Backpressure built-in</li>
-            <li>~30 KB gzip</li>
-          </ul>
           <div className="hero--rtcio__code">
             <CodeBlock language="bash">{installSnippet}</CodeBlock>
             <CodeBlock language="ts" title="client.ts">{clientSnippet}</CodeBlock>
