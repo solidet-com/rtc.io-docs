@@ -81,21 +81,166 @@ article header h1 {
 
 /* Hero on the landing page. */
 .hero--rtcio {
-  background: linear-gradient(160deg, #0a0908 0%, #15110b 100%);
-  padding: 6rem 0 4rem;
+  position: relative;
+  background:
+    radial-gradient(1200px 500px at 50% -10%, rgba(243, 236, 224, 0.07), transparent 60%),
+    radial-gradient(800px 400px at 80% 110%, rgba(217, 128, 112, 0.08), transparent 60%),
+    linear-gradient(160deg, #0a0908 0%, #15110b 100%);
+  padding: 5rem 0 4.5rem;
   border-bottom: 1px solid #1f1a13;
+  overflow: hidden;
+  text-align: center;
+}
+
+.hero--rtcio::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(243, 236, 224, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(243, 236, 224, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+  pointer-events: none;
+}
+
+.hero--rtcio__inner {
+  position: relative;
+  max-width: 880px;
+}
+
+.hero--rtcio__wordmark {
+  text-align: center;
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 700;
+  font-size: clamp(3.2rem, 8vw, 5.5rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #f3ece0;
+  margin: 0 auto 1.25rem;
+  user-select: none;
+}
+
+.hero--rtcio__wordmark .hero--rtcio__dot {
+  color: #d98070;
+  display: inline-block;
+  transform: translateY(-0.05em);
+}
+
+.hero--rtcio__eyebrow {
+  text-align: center;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #a89876;
+  margin: 0 0 1.75rem;
 }
 
 .hero--rtcio .hero__title {
-  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  text-align: center;
+  font-size: clamp(2rem, 4.4vw, 3.2rem);
   letter-spacing: -0.025em;
   font-weight: 700;
+  line-height: 1.1;
+  max-width: 22ch;
+  margin: 0 auto 1.25rem;
+}
+
+.hero--rtcio .hero__title code {
+  font-size: 0.85em;
+  background: rgba(243, 236, 224, 0.08);
+  border: 1px solid rgba(243, 236, 224, 0.14);
+  border-radius: 6px;
+  padding: 0.05em 0.35em;
+  font-weight: 600;
 }
 
 .hero--rtcio .hero__subtitle {
   color: #c9bba5;
-  max-width: 36ch;
+  max-width: 56ch;
   margin: 0 auto;
-  font-size: 1.15rem;
-  line-height: 1.5;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.hero--rtcio__cta {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.hero--rtcio__pills {
+  list-style: none;
+  padding: 0;
+  margin: 2rem auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.hero--rtcio__pills li {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: #c9bba5;
+  background: rgba(243, 236, 224, 0.05);
+  border: 1px solid rgba(243, 236, 224, 0.1);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+}
+
+.hero--rtcio__code {
+  max-width: 720px;
+  margin: 3rem auto 0;
+  text-align: left;
+}
+
+/* Feature grid below the hero. */
+.landing-features {
+  padding: 4.5rem 1rem 5rem;
+}
+
+.landing-features__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.landing-feature {
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--ifm-toc-border-color);
+  background: var(--ifm-background-surface-color);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.landing-feature:hover {
+  transform: translateY(-2px);
+  border-color: rgba(243, 236, 224, 0.25);
+}
+
+.landing-feature__title {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.landing-feature__body {
+  font-size: 0.95rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.55;
+  margin-bottom: 0.75rem;
+}
+
+.landing-feature__link {
+  font-size: 0.9rem;
+  font-family: var(--ifm-font-family-monospace);
 }

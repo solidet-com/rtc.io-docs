@@ -10,16 +10,23 @@ const socket = io("https://server.rtcio.dev", {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 });
 
-socket.server.emit("join-room", { roomId: "demo", name: "alice" });
-
+// Ask for camera/mic *before* joining — a peer who arrives during the
+// browser permission prompt would otherwise see you as "in the room"
+// with no stream attached.
 const local = await navigator.mediaDevices.getUserMedia({
   video: true, audio: true,
 });
+const camera = new RTCIOStream(local);
 
-socket.emit("camera", new RTCIOStream(local));
+socket.server.emit("join-room", { roomId: "demo", name: "alice" });
 
-socket.on("camera", (remote) => {
-  videoEl.srcObject = remote.mediaStream;
+// You can ship app metadata alongside the stream — the library walks args
+// for any RTCIOStream and preserves the rest of the shape verbatim.
+socket.emit("camera", { stream: camera, metadata: { displayName: "Alice" } });
+
+socket.on("camera", ({ stream, metadata }) => {
+  videoEl.srcObject = stream.mediaStream;
+  label.textContent = metadata.displayName;
 });`;
 
 export default function Home() {
@@ -29,15 +36,23 @@ export default function Home() {
       description="rtc.io is a WebRTC client and signaling server with socket.io ergonomics. Streams, broadcast and per-peer DataChannels, perfect negotiation, ICE handling — all wrapped behind a familiar emit/on API."
     >
       <header className="hero hero--rtcio">
-        <div className="container">
+        <div className="container hero--rtcio__inner">
+          <div className="hero--rtcio__wordmark" aria-label="rtc.io">
+            rtc<span className="hero--rtcio__dot">.</span>io
+          </div>
+          <p className="hero--rtcio__eyebrow">
+            WebRTC client &middot; signaling server &middot; socket.io ergonomics
+          </p>
           <h1 className="hero__title">
-            WebRTC, with socket.io ergonomics.
+            Peer-to-peer media and data,<br />
+            behind <code>emit</code> &amp; <code>on</code>.
           </h1>
           <p className="hero__subtitle">
-            Browser-to-browser media, broadcast channels, per-peer messaging, file transfers —
-            wrapped behind <code>emit</code>/<code>on</code>. The server stays a thin signaling relay.
+            Browser-to-browser streams, broadcast and per-peer DataChannels, file transfers,
+            late-joiner replay, perfect negotiation — all wrapped behind the socket.io API
+            you already know. The server stays a thin signaling relay.
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+          <div className="hero--rtcio__cta">
             <Link className="button button--primary button--lg" to="/docs/getting-started">
               Get started
             </Link>
@@ -45,18 +60,25 @@ export default function Home() {
               Tutorial
             </Link>
             <Link className="button button--secondary button--lg" href="https://rtcio.dev">
-              Try the demo
+              Try the demo &rarr;
             </Link>
           </div>
-          <div style={{ maxWidth: 720, margin: '2.5rem auto 0', padding: '0 1rem' }}>
+          <ul className="hero--rtcio__pills">
+            <li>MIT licensed</li>
+            <li>Zero SDP code</li>
+            <li>Late-joiner replay</li>
+            <li>Backpressure built-in</li>
+            <li>~30 KB gzip</li>
+          </ul>
+          <div className="hero--rtcio__code">
             <CodeBlock language="bash">{installSnippet}</CodeBlock>
             <CodeBlock language="ts" title="client.ts">{clientSnippet}</CodeBlock>
           </div>
         </div>
       </header>
 
-      <main className="container" style={{ padding: '4rem 1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', maxWidth: 1100, margin: '0 auto' }}>
+      <main className="container landing-features">
+        <div className="landing-features__grid">
           <Feature
             title="Perfect negotiation, baked in"
             body="W3C polite/impolite roles, stale-answer detection, manual rollback fallback, automatic ICE restart on failure. You never see an offer, an answer, or an ICE candidate."
@@ -101,15 +123,10 @@ export default function Home() {
 
 function Feature({ title, body, link, linkLabel }: { title: string; body: string; link: string; linkLabel: string }) {
   return (
-    <div style={{
-      padding: '1.5rem',
-      borderRadius: '12px',
-      border: '1px solid var(--ifm-toc-border-color)',
-      background: 'var(--ifm-background-surface-color)',
-    }}>
-      <h3 style={{ marginTop: 0, fontSize: '1.05rem' }}>{title}</h3>
-      <p style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-700)', lineHeight: 1.55 }}>{body}</p>
-      <Link to={link} style={{ fontSize: '0.9rem' }}>{linkLabel} →</Link>
+    <div className="landing-feature">
+      <h3 className="landing-feature__title">{title}</h3>
+      <p className="landing-feature__body">{body}</p>
+      <Link to={link} className="landing-feature__link">{linkLabel} →</Link>
     </div>
   );
 }
