@@ -57,8 +57,6 @@ socket.emit("camera", { id: socket.id, name: NAME, camera });
 
 The `{ id, name, camera }` shape is the **metadata pattern** — anything you put alongside the `RTCIOStream` rides through unchanged, including for late joiners. Use it for the display name, the kind of stream (`"camera" | "screen"`), the source app, anything the receiver needs to render the tile correctly. See [Attaching metadata to a stream](/docs/guides/streams#attaching-metadata-to-a-stream) for the full rules.
 
-> **Why the camera is acquired before `join-room`.** The top-level `await getUserMedia` blocks the script until the user accepts the browser permission prompt — so by the time `socket.on("connect")` fires and we send `join-room`, the stream is already in hand. If you flipped the order (joined first, then asked for permission), a peer who arrives during the prompt would see you as "in the room" but with no stream attached — they'd render an empty tile until you accepted, which could be a long time, or never. Always order the user-facing flow as **getUserMedia → join-room → emit**.
-
 ## Receive remote streams
 
 ```ts

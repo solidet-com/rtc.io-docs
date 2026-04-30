@@ -75,10 +75,6 @@ A complete two-tab demo. Save as `index.html`, open it in two tabs, you'll see y
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    // Ask for camera/mic *before* joining the room. If you join first and
-    // a peer arrives while the browser permission prompt is still up, they
-    // see you as "in the room" with no stream — and only get media once
-    // you finally accept the prompt.
     const local = await navigator.mediaDevices.getUserMedia({
       video: true, audio: true,
     });

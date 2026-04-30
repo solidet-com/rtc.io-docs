@@ -83,22 +83,6 @@ Things to keep in mind:
 - **Hold the wrapper stable.** One `RTCIOStream` per underlying media for the whole session; a fresh wrapper on every emit creates a new stream id and registers a duplicate.
 - **JSON-safe metadata only.** Once the stream tokens are swapped in, the payload goes through `JSON.stringify`. Functions and class instances (other than `RTCIOStream` itself) won't survive the trip.
 
-## Ask for permission *before* `join-room`
-
-Order the user-facing flow as **getUserMedia → join-room → emit**, not the other way around:
-
-```ts
-// ✅ permission first, then join, then emit
-const local = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-const camera = new RTCIOStream(local);
-socket.server.emit("join-room", { roomId, name });
-socket.on("peer-connect", () => socket.emit("camera", camera));
-```
-
-If you `join-room` first, a peer who joins while you're still sitting on the browser's permission prompt sees you as already in the room but with no stream attached — they render an empty tile and only see your camera once you accept the prompt (which can be tens of seconds later, or never if the user rejects). Asking for permission up-front gives you a stream you can `emit` the moment a peer connects, so newcomers see media immediately.
-
-(For apps where the user might join the room and *then* opt into camera — voice-only fallback, lobby UI, etc. — that's fine too; just be aware that the empty-tile state is on you to render. The library will deliver the stream whenever you `emit` it.)
-
 ## Late joiners
 
 If peer A `emit`s a camera, then peer B joins the room afterwards, peer B should see A's camera. Without intervention, B wouldn't — A's `emit` happened before B existed.

@@ -213,9 +213,6 @@ const socket = io('https://server.rtcio.dev', {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 });
 
-// Ask for camera/mic *before* joining. If a peer joins while we're still
-// on the browser permission prompt, they'd see us as "in the room" with
-// no stream attached — they get media only once we accept the prompt.
 const local = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 localEl.srcObject = local;
 const camera = new RTCIOStream(local);

@@ -10,9 +10,6 @@ const socket = io("https://server.rtcio.dev", {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 });
 
-// Ask for camera/mic *before* joining — a peer who arrives during the
-// browser permission prompt would otherwise see you as "in the room"
-// with no stream attached.
 const local = await navigator.mediaDevices.getUserMedia({
   video: true, audio: true,
 });
