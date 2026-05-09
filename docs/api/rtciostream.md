@@ -53,9 +53,8 @@ The underlying browser `MediaStream`. Use it for `<video>.srcObject`, `getTracks
 
 ```ts
 videoEl.srcObject = camera.mediaStream;
+camera.mediaStream.getAudioTracks()[0].enabled = false;   // mute
 ```
-
-> **A word on muting.** `track.enabled = false` mutes the wire but keeps the camera/mic open — **the device LED stays on**. That's a platform privacy guarantee, not something the library can hide. If you want the LED to track the toggle, `track.stop()` to release the device, and reacquire + [`replaceTrack`](#replacetracknewtrack) on the way back up. See [Streams · Toggling tracks](/docs/guides/streams#toggling-tracks-mute-camera-off) for the full pattern.
 
 ## Methods
 
@@ -78,38 +77,6 @@ Replace all tracks with the tracks from `stream`. Removes existing ones, adds th
 const fresh = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 camera.replace(fresh);
 ```
-
-### `replaceTrack(newTrack)`
-
-```ts
-replaceTrack(newTrack: MediaStreamTrack): MediaStreamTrack | null
-```
-
-Swap the existing track of the same kind (`audio` / `video`) for `newTrack`. Returns the displaced track so the caller can `.stop()` it.
-
-The library hot-swaps via [`RTCRtpSender.replaceTrack`](https://developer.mozilla.org/en-US/docs/Web/API/RTCRtpSender/replaceTrack) on every peer — **no SDP renegotiation**, no audible glitch, peers keep streaming. Use this for:
-
-- **Mid-call device picker.** User picked a different mic/cam; swap the underlying track without rebuilding the connection.
-- **Toggle camera/mic back on after a hard mute.** `track.stop()` released the device on the way down; reacquire via `getUserMedia` and call `replaceTrack` on the way back up.
-
-```ts
-// Device picker
-const fresh = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id } } });
-const old = camera.replaceTrack(fresh.getVideoTracks()[0]);
-old?.stop();
-```
-
-```ts
-// Toggle camera off → on (LED-respecting pattern)
-camera.mediaStream.getVideoTracks()[0]?.stop();   // off — LED dies
-
-// later…
-const fresh = await navigator.mediaDevices.getUserMedia({ video: true });
-const dead = camera.replaceTrack(fresh.getVideoTracks()[0]);
-dead?.stop();                                      // dispose the prior (already-ended) track
-```
-
-`replaceTrack` returns `null` if the stream had no track of the new track's kind to displace — the new track is added regardless, and a new transceiver lights up on the next negotiation round.
 
 ### `onTrackChanged(callback)`
 
@@ -149,80 +116,6 @@ const off = remoteStream.onTrackRemoved((track) => {
 ```
 
 These are the primitives behind the receive-side [`track-added`](events#track-added) and [`track-removed`](events#track-removed) events; you usually want those instead unless you're holding a stream wrapper directly.
-
-### `setEncoding(partial)`
-
-```ts
-setEncoding(partial: Partial<VideoEncodingConfig>): Promise<void>
-```
-
-Update sender-side video encoding parameters at runtime, across **every peer** currently receiving this stream — already-connected and late joiners. Merges `partial` over the current config and re-applies to all tracked `RTCRtpSender`s. **No renegotiation**, no offer/answer round trip — these are `setParameters` updates.
-
-```ts
-// Bandwidth alert: halve the ceiling on every peer.
-await game.setEncoding({ maxBitrate: 4_000_000 });
-
-// User flipped from gameplay (motion) to a stats overlay (text/detail).
-await game.setEncoding({
-  contentHint: "detail",
-  degradationPreference: "maintain-resolution",
-});
-
-// Chrome warned about uplink saturation — drop to 30 fps cap.
-await game.setEncoding({ maxFramerate: 30 });
-```
-
-Accepts the same fields as the constructor's `videoEncoding` option: `maxBitrate`, `maxFramerate`, `degradationPreference`, `contentHint`, `priority`, `networkPriority`, `scaleResolutionDownBy`. Pass only the fields you want to change — others stay at their current value.
-
-The promise resolves once `setParameters` has been called on every tracked sender. Individual sender failures are swallowed (they typically mean the peer just disconnected). For codec changes, see `setCodecPreferences` below — those need a renegotiation round, which `setEncoding` deliberately doesn't trigger.
-
-### `setCodecPreferences(cb)`
-
-```ts
-setCodecPreferences(cb: CodecPreferenceCallback | undefined): Promise<void>
-
-type CodecPreferenceCallback = (
-  capabilities: RTCRtpCodec[],
-  kind: 'audio' | 'video',
-) => RTCRtpCodec[];
-```
-
-Re-order codecs on every peer currently receiving this stream and trigger a single offer/answer round per peer to put the change on the wire. The capture stream and senders survive — peers see at most a keyframe glitch as the encoder swaps.
-
-Use this when the user picks a different codec mid-call (e.g. flips VP9 → AV1 in screen-share settings). For `getDisplayMedia` streams this is the **alternative to stop+restart**, which would re-prompt the user to pick the screen/window/tab again.
-
-```ts
-// Switch the active stream to AV1, fall back through VP9 → VP8 → H.264.
-await game.setCodecPreferences((caps, kind) => {
-  if (kind !== "video") return caps;
-  const order = ["video/AV1", "video/VP9", "video/VP8", "video/H264"];
-  return order.flatMap(m => caps.filter(c => c.mimeType.toLowerCase() === m.toLowerCase()));
-});
-
-// Reset to the browser's default order.
-await game.setCodecPreferences(undefined);
-```
-
-The callback is the same shape as the constructor's `codecPreferences` option — receives the browser's reported codec list, returns the preferred ordering. Codecs not in the returned list are dropped from this transceiver. An empty return is treated as "leave the previous order alone."
-
-Encoder knobs (bitrate, FPS cap, degradation, contentHint) belong on `setEncoding` — they don't need renegotiation. Codec is the one that does, hence the dedicated method.
-
-The promise resolves once preferences have been applied to every tracked transceiver and per-peer offer cycles have been kicked off. Awaiting it does **not** wait for the offers to complete — that's an out-of-band signaling round.
-
-#### Live resolution / FPS
-
-For resolution and frame rate changes, neither method applies — they're capture-side, not encoder-side. Call `applyConstraints` directly on the underlying track:
-
-```ts
-const videoTrack = game.mediaStream.getVideoTracks()[0];
-await videoTrack.applyConstraints({
-  width:     { ideal: 1280 },
-  height:    { ideal: 720 },
-  frameRate: { ideal: 30 },
-});
-```
-
-No renegotiation, no re-prompt. Display-capture tracks have weaker `applyConstraints` semantics than camera tracks — Chrome honours both width/height and frameRate, Firefox often ignores frameRate. The encoder cap from `setEncoding({ maxFramerate })` still bites on browsers that drop the constraint.
 
 ### `toJSON()`
 
@@ -328,8 +221,6 @@ The library calls this for you on every inbound stream when its peer disconnects
 - **Don't pass the raw `MediaStream` to `socket.emit`.** It looks like it would work but the library only detects `RTCIOStream` instances. Wrap with `new RTCIOStream(media)`.
 - **Don't construct a new wrapper on every render.** Identity matters — re-emitting a fresh wrapper would create a new id and start a fresh stream registration. Hold onto one wrapper for the lifetime of the underlying media.
 - **Track changes vs replace.** `replaceTrack` (track-level) doesn't fire `addtrack`/`removetrack` on the `MediaStream` — only `addTrack`/`removeTrack` (stream-level) do. The library uses the latter for its callback wiring, so swap tracks via `removeTrack` + `addTrack` if you want `onTrackChanged` to fire.
-- **`track.enabled = false` does not turn off the camera light.** It mutes the wire only. Use `track.stop()` + reacquire if you want users to see the device LED match their toggle. See [Streams · Toggling tracks](/docs/guides/streams#toggling-tracks-mute-camera-off).
-- **Don't stop+restart `getDisplayMedia` to change codec or resolution mid-share.** It re-prompts the user to pick the screen/window/tab. Use `setCodecPreferences` for codec, `track.applyConstraints` for resolution / FPS.
 
 ## Live examples
 

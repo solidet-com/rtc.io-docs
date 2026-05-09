@@ -111,40 +111,14 @@ This drops the stream from the registry. Already-connected peers are unaffected;
 
 ## Toggling tracks (mute, camera off)
 
-There are two patterns, and they have different implications for the **device LED** (the camera light, the OS / tab "in use" indicator). Pick based on what you want users to see.
-
-### Soft mute — `track.enabled = false`
-
-Mutes the wire without releasing the device. The transmission continues at low overhead and the remote side sees zeroed-out frames/silence.
+The right way to mute a mic isn't to remove the track; it's to set `track.enabled = false`. The track stays in the transceiver, the transmission continues at low overhead, and the remote side just sees zeroed-out frames/silence.
 
 ```ts
-local.getAudioTracks().forEach(t => t.enabled = false);   // mute mic
-local.getVideoTracks().forEach(t => t.enabled = false);   // camera "off"
+local.getAudioTracks().forEach(t => t.enabled = false);  // mute mic
+local.getVideoTracks().forEach(t => t.enabled = false);  // camera off
 ```
 
-No signaling, no renegotiation. **The platform LED stays on** because the device is still open — that's a privacy guarantee browsers (and macOS/Windows) honour by design. Use this when you want a fast unmute path and your users understand the indicator.
-
-### Hard mute — `track.stop()` and re-acquire
-
-Releases the device entirely. The LED dies. To restore later, re-acquire via `getUserMedia` and hot-swap onto the existing senders with [`replaceTrack`](#swapping-tracks-mic--camera-switch) — no SDP renegotiation, peers keep streaming.
-
-```ts
-// Off:
-local.getVideoTracks()[0]?.stop();   // LED off, device released
-
-// On (later):
-const fresh = await navigator.mediaDevices.getUserMedia({ video: true });
-const old   = rtcioStream.replaceTrack(fresh.getVideoTracks()[0]);
-old?.stop();                          // dispose the (already-ended) prior track
-```
-
-**This is what most call apps actually want.** Users expect the LED to track their mic/cam toggle; soft mute confuses them ("is the app still listening?"). The trade-off is a 100–300 ms re-acquire delay on toggle-on.
-
-It also incidentally **dodges a Chrome quirk** where a long sequence of `enabled = false / true` flips on an audio track can leave the capture pipeline silenced for several seconds. Reacquiring hands the encoder a fresh track every time, so the stuck-silent state has nowhere to live. Symptom: "I unmuted but no one can hear me until I switch browsers."
-
-### Don't mix the two
-
-If you're using hard mute, also avoid setting `enabled = false` elsewhere — the patterns reinforce each other for users but compose into spaghetti for code.
+This won't trigger any signaling. It's purely a browser-side flag.
 
 ## Swapping tracks (mic / camera switch)
 
