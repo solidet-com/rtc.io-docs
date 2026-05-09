@@ -163,23 +163,37 @@ You don't write any of that. It's just there.
 
 ## Toggling mic and camera
 
-To mute, set `track.enabled = false` — don't remove the track:
+There are two patterns; pick based on what you want users to see.
+
+**Soft mute** — `track.enabled = false`. Mutes the wire only:
 
 ```ts
 local.getAudioTracks().forEach(t => t.enabled = false);   // mute
-local.getVideoTracks().forEach(t => t.enabled = false);   // camera off
+local.getVideoTracks().forEach(t => t.enabled = false);   // camera "off"
 ```
 
-The transceiver stays alive; the remote side just sees zeroed-out frames/silence. Toggle back to `true` to resume. No re-negotiation, no signaling.
+The transceiver stays alive; the remote sees zeroed-out frames/silence. No renegotiation, no signaling. **The device LED stays on** — that's the platform privacy indicator that the device is open. If your users are confused by the LED while their mic toggle says "off", you want hard mute below.
 
-If you want peers to see your mute state in their UI, broadcast it via `socket.emit`:
+**Hard mute** — `track.stop()` to release the device, reacquire on the way back up:
 
 ```ts
-function setMic(on: boolean) {
-  local.getAudioTracks().forEach(t => t.enabled = on);
+async function setMic(on: boolean) {
+  if (!on) {
+    local.getAudioTracks()[0]?.stop();   // releases the mic, LED off
+  } else {
+    const fresh = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const old = camera.replaceTrack(fresh.getAudioTracks()[0]);
+    old?.stop();
+  }
   socket.emit("media-state", { id: socket.id, mic: on, cam: camOn, roomId: ROOM });
 }
+```
 
+`replaceTrack` hot-swaps via `RTCRtpSender.replaceTrack` on every peer — no SDP renegotiation, peers keep streaming. Costs a 100–300 ms reacquire delay on toggle-on; that's the right trade-off for almost every call app, and it incidentally dodges a Chrome quirk where rapid `enabled` flips can leave the audio pipeline silenced for several seconds.
+
+Either way, broadcast the state to peers so their UI matches yours:
+
+```ts
 socket.on("media-state", ({ id, mic, cam }) => {
   // Update your UI for peer `id`.
 });

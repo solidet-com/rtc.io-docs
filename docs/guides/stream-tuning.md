@@ -44,36 +44,44 @@ const [video] = stream.getVideoTracks();
 
 Setting the hint is one line and is the single highest-leverage change for "why does my game look bad".
 
-### 3 · Encoder `maxBitrate` via `setParameters`
+### 3 · Encoder `maxBitrate` (and friends) via `RTCIOStream` options
 
 Even after you ask for 60 fps and tell the encoder to favor motion, **Chromium caps the outgoing video bitrate at around 2.5 Mbps for screen capture by default**. That's enough for a 1080p slide deck and visibly insufficient for 1080p60 game footage.
 
-You raise it with `RTCRtpSender.setParameters`:
+The library lets you pass encoder knobs to `RTCIOStream` and applies them to **every peer** — already-connected and late joiners — so you don't have to walk the connection's senders yourself:
 
 ```ts
-import { socket } from "rtc.io";
+import { RTCIOStream } from "rtc.io";
 
-// rtc.io exposes the underlying RTCPeerConnection per peer:
-const conn = socket.getPeer(peerId)?.connection;
-if (!conn) return;
+const screen = new RTCIOStream(displayStream, {
+  videoEncoding: {
+    contentHint:           "motion",
+    maxBitrate:            8_000_000,            // 8 Mbps — comfortable for 1080p60 motion
+    maxFramerate:          60,
+    degradationPreference: "maintain-framerate", // drop resolution before FPS under pressure
+    priority:              "high",
+    networkPriority:       "high",
+  },
+});
 
-for (const sender of conn.getSenders()) {
-  if (sender.track?.kind !== "video") continue;
-  // (filter to the screen-share track if you have multiple)
-
-  const params = sender.getParameters();
-  params.encodings = (params.encodings ?? [{}]).map((enc) => ({
-    ...enc,
-    maxBitrate: 8_000_000,    // 8 Mbps — comfortable for 1080p60 motion
-    maxFramerate: 60,
-  }));
-  await sender.setParameters(params);
-}
+socket.emit("screen", screen);
 ```
 
-This is per-peer — you call it once for every connected peer, and once more in your `peer-connect` handler so the cap is also applied when a new peer joins mid-share. The reference demo (`rtcio-web`) does this in `startScreenShare()`.
+Already-connected peers receive the new transceiver with these params; peers that join later get them too — the library re-applies on every replay.
 
-How high to go:
+To change them at runtime (bandwidth alert, the user flipping presets) without an offer/answer round trip:
+
+```ts
+await screen.setEncoding({ maxBitrate: 4_000_000 });   // halved cap, every peer
+await screen.setEncoding({ contentHint: "detail",
+                            degradationPreference: "maintain-resolution" });
+```
+
+For codec swaps (VP9 → AV1) and live resolution / FPS changes, see the [`RTCIOStream` API page](/docs/api/rtciostream#setcodecpreferencescb) — `setCodecPreferences` triggers exactly one offer/answer round per peer (the capture stream survives), and `track.applyConstraints` handles capture-side resolution / FPS without renegotiation.
+
+> **Why not call `setParameters` directly?** You can — `socket.getPeer(peerId)?.connection` exposes the raw `RTCPeerConnection`. But manual `setParameters` doesn't reapply when a track is replaced (mic switch, mute → reacquire), and it doesn't reapply for late joiners — you'd have to wire it from `peer-connect` and from your track-swap handlers, separately. The `RTCIOStream` options route handles both.
+
+How high to set `maxBitrate`:
 
 | Resolution + framerate | Comfortable cap |
 | --- | --- |
@@ -143,36 +151,54 @@ through the library matches what most apps will do on day one; reach for
 these knobs when you've got a concrete quality complaint to fix.
 
 ```ts
+import { RTCIOStream } from "rtc.io";
+
 const raw = await navigator.mediaDevices.getDisplayMedia({
-  video: { frameRate: { ideal: 60, max: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+  video: {
+    frameRate: { ideal: 60, max: 60 },
+    width:     { ideal: 1920 },
+    height:    { ideal: 1080 },
+  },
+  // For non-voice audio (game / music / system capture), turn the voice
+  // DSP off — it crushes effects and music. Keep it on for voice.
   audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
 });
 
-raw.getVideoTracks().forEach((t) => ((t as any).contentHint = 'motion'));
-raw.getAudioTracks().forEach((t) => ((t as any).contentHint = 'music'));
+raw.getAudioTracks().forEach((t) => ((t as any).contentHint = "music"));
 
-const screen = new RTCIOStream(raw);
-socket.emit('screenshare', { id: socket.id, name: userName, stream: screen });
-
-// Bump every existing peer's outgoing screen-share encoder.
-queueMicrotask(() => {
-  for (const p of peers) {
-    const conn = socket.getPeer(p.id)?.connection;
-    if (!conn) continue;
-    for (const sender of conn.getSenders()) {
-      if (sender.track?.kind !== 'video') continue;
-      if (!raw.getVideoTracks().some((t) => t.id === sender.track?.id)) continue;
-      const params = sender.getParameters();
-      params.encodings = (params.encodings ?? [{}]).map((enc) => ({
-        ...enc, maxBitrate: 8_000_000, maxFramerate: 60,
-      }));
-      sender.setParameters(params).catch(() => {});
-    }
-  }
+const screen = new RTCIOStream(raw, {
+  videoEncoding: {
+    contentHint:           "motion",                     // applied to every video track
+    maxBitrate:            8_000_000,                    // ~70-80% of measured uplink
+    maxFramerate:          60,
+    degradationPreference: "maintain-framerate",         // drop resolution before FPS
+    priority:              "high",
+    networkPriority:       "high",
+  },
+  // Optional: prefer VP9 / AV1 — significant bitrate win on motion content.
+  codecPreferences: (caps, kind) => {
+    if (kind !== "video") return caps;
+    const order = ["video/VP9", "video/AV1", "video/VP8", "video/H264"];
+    return order.flatMap(m => caps.filter(c => c.mimeType.toLowerCase() === m.toLowerCase()));
+  },
 });
 
-// Same path runs again on `peer-connect` so the cap also applies to
-// peers that join mid-share.
+socket.emit("screenshare", { id: socket.id, name: userName, stream: screen });
+```
+
+That's it. Every connected peer gets the encoder ceiling; every peer that joins later gets it too — the library re-applies on replay. No `peer-connect` handler walking senders, no per-track sweep when the user swaps mic/cam.
+
+If the user changes settings mid-share:
+
+```ts
+// Bitrate / framerate / contentHint / degradation — live, no renegotiation.
+await screen.setEncoding({ maxBitrate: 4_000_000, maxFramerate: 30 });
+
+// Codec — one offer/answer round per peer, capture stream survives.
+await screen.setCodecPreferences((caps, kind) => /* new ordering */);
+
+// Resolution / FPS at the capture layer — no renegotiation, no re-prompt.
+await raw.getVideoTracks()[0].applyConstraints({ width: 1280, height: 720, frameRate: 30 });
 ```
 
 That's the whole "make screen sharing not look like 2014 Skype" recipe.
