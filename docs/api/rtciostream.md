@@ -174,27 +174,40 @@ await game.setEncoding({ maxFramerate: 30 });
 
 Accepts the same fields as the constructor's `videoEncoding` option: `maxBitrate`, `maxFramerate`, `degradationPreference`, `contentHint`, `priority`, `networkPriority`, `scaleResolutionDownBy`. Pass only the fields you want to change — others stay at their current value.
 
-The promise resolves once `setParameters` has been called on every tracked sender. Individual sender failures are swallowed (they typically mean the peer just disconnected). Codec changes are not runtime-mutable — see "Changing codec mid-stream" below.
+The promise resolves once `setParameters` has been called on every tracked sender. Individual sender failures are swallowed (they typically mean the peer just disconnected). For codec changes, see `setCodecPreferences` below — those need a renegotiation round, which `setEncoding` deliberately doesn't trigger.
 
-#### Changing codec mid-stream
-
-`codecPreferences` is fixed at stream construction. The library applies the preference once at transceiver creation; swapping codecs after the fact requires renegotiation, and we found that renegotiation to disrupt audio on existing senders. There is no `setCodecPreferences()` runtime setter.
-
-To change codec on an active stream, tear it down and create a fresh one with new options:
+### `setCodecPreferences(cb)`
 
 ```ts
-socket.untrackStream(game);
-game.mediaStream.getTracks().forEach(t => t.stop());
+setCodecPreferences(cb: CodecPreferenceCallback | undefined): Promise<void>
 
-const fresh = await navigator.mediaDevices.getDisplayMedia({ /* same constraints */ });
-const newGame = new RTCIOStream(fresh, {
-  videoEncoding: { /* same encoder config */ },
-  codecPreferences: (caps, kind) => { /* new ordering */ },
-});
-socket.emit("game", newGame);
+type CodecPreferenceCallback = (
+  capabilities: RTCRtpCodec[],
+  kind: 'audio' | 'video',
+) => RTCRtpCodec[];
 ```
 
-For `getDisplayMedia` streams this re-prompts the user to pick a screen/window/tab. There is no shortcut — the trade-off bought back stable audio on the rest of the call.
+Re-order codecs on every peer currently receiving this stream and trigger a single offer/answer round per peer to put the change on the wire. The capture stream and senders survive — peers see at most a keyframe glitch as the encoder swaps.
+
+Use this when the user picks a different codec mid-call (e.g. flips VP9 → AV1 in screen-share settings). For `getDisplayMedia` streams this is the **alternative to stop+restart**, which would re-prompt the user to pick the screen/window/tab again.
+
+```ts
+// Switch the active stream to AV1, fall back through VP9 → VP8 → H.264.
+await game.setCodecPreferences((caps, kind) => {
+  if (kind !== "video") return caps;
+  const order = ["video/AV1", "video/VP9", "video/VP8", "video/H264"];
+  return order.flatMap(m => caps.filter(c => c.mimeType.toLowerCase() === m.toLowerCase()));
+});
+
+// Reset to the browser's default order.
+await game.setCodecPreferences(undefined);
+```
+
+The callback is the same shape as the constructor's `codecPreferences` option — receives the browser's reported codec list, returns the preferred ordering. Codecs not in the returned list are dropped from this transceiver. An empty return is treated as "leave the previous order alone."
+
+Encoder knobs (bitrate, FPS cap, degradation, contentHint) belong on `setEncoding` — they don't need renegotiation. Codec is the one that does, hence the dedicated method.
+
+The promise resolves once preferences have been applied to every tracked transceiver and per-peer offer cycles have been kicked off. Awaiting it does **not** wait for the offers to complete — that's an out-of-band signaling round.
 
 #### Live resolution / FPS
 
@@ -316,7 +329,7 @@ The library calls this for you on every inbound stream when its peer disconnects
 - **Don't construct a new wrapper on every render.** Identity matters — re-emitting a fresh wrapper would create a new id and start a fresh stream registration. Hold onto one wrapper for the lifetime of the underlying media.
 - **Track changes vs replace.** `replaceTrack` (track-level) doesn't fire `addtrack`/`removetrack` on the `MediaStream` — only `addTrack`/`removeTrack` (stream-level) do. The library uses the latter for its callback wiring, so swap tracks via `removeTrack` + `addTrack` if you want `onTrackChanged` to fire.
 - **`track.enabled = false` does not turn off the camera light.** It mutes the wire only. Use `track.stop()` + reacquire if you want users to see the device LED match their toggle. See [Streams · Toggling tracks](/docs/guides/streams#toggling-tracks-mute-camera-off).
-- **Don't stop+restart `getDisplayMedia` to change resolution / FPS mid-share.** It re-prompts the user to pick the screen/window/tab. Use `track.applyConstraints` for resolution / FPS, `setEncoding` for encoder knobs. Codec changes do require restart — there is no live setter.
+- **Don't stop+restart `getDisplayMedia` to change codec or resolution mid-share.** It re-prompts the user to pick the screen/window/tab. Use `setCodecPreferences` for codec, `track.applyConstraints` for resolution / FPS.
 
 ## Live examples
 

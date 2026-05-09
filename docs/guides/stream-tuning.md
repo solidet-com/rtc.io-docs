@@ -77,7 +77,7 @@ await screen.setEncoding({ contentHint: "detail",
                             degradationPreference: "maintain-resolution" });
 ```
 
-For live resolution / FPS changes, `track.applyConstraints` handles capture-side resolution / FPS without renegotiation. Codec changes are *not* live — `codecPreferences` is fixed at construction; to change codec, tear the stream down and create a fresh one with new options. See the [`RTCIOStream` API page](/docs/api/rtciostream#changing-codec-mid-stream) for the full pattern.
+For codec swaps (VP9 → AV1) and live resolution / FPS changes, see the [`RTCIOStream` API page](/docs/api/rtciostream#setcodecpreferencescb) — `setCodecPreferences` triggers exactly one offer/answer round per peer (the capture stream survives), and `track.applyConstraints` handles capture-side resolution / FPS without renegotiation.
 
 > **Why not call `setParameters` directly?** You can — `socket.getPeer(peerId)?.connection` exposes the raw `RTCPeerConnection`. But manual `setParameters` doesn't reapply when a track is replaced (mic switch, mute → reacquire), and it doesn't reapply for late joiners — you'd have to wire it from `peer-connect` and from your track-swap handlers, separately. The `RTCIOStream` options route handles both.
 
@@ -194,12 +194,11 @@ If the user changes settings mid-share:
 // Bitrate / framerate / contentHint / degradation — live, no renegotiation.
 await screen.setEncoding({ maxBitrate: 4_000_000, maxFramerate: 30 });
 
+// Codec — one offer/answer round per peer, capture stream survives.
+await screen.setCodecPreferences((caps, kind) => /* new ordering */);
+
 // Resolution / FPS at the capture layer — no renegotiation, no re-prompt.
 await raw.getVideoTracks()[0].applyConstraints({ width: 1280, height: 720, frameRate: 30 });
-
-// Codec is *not* live: tear down and re-create with new codecPreferences.
-// For getDisplayMedia this re-prompts the user to pick a screen — there is
-// no shortcut. The cost bought back stable audio on the rest of the call.
 ```
 
 That's the whole "make screen sharing not look like 2014 Skype" recipe.
