@@ -152,7 +152,7 @@ All subsequent traffic — `socket.emit("chat")`, `socket.peer(id).emit("rpc")`,
 - **Stale answers** — if `setRemoteDescription` rejects on a stable signaling state, rtc.io drops the answer and waits for the next one rather than throwing.
 - **ICE failures** — `iceConnectionState === "failed"` triggers `restartIce()`. The connection self-heals if the network blips.
 - **Late joiners** — streams you `emit`ed before peer X showed up get replayed onto peer X automatically.
-- **Track changes** — toggle a track's `enabled`, replace it via `replaceTrack`, or `addTrack`/`removeTrack` on the underlying `MediaStream` — rtc.io reuses idle transceivers and avoids spinning up new ones.
+- **Track changes** — `replaceTrack`, `addTrack`, or `removeTrack` on the **`RTCIOStream` wrapper** (not the underlying `MediaStream` — programmatic mutations on the raw `MediaStream` don't fire `addtrack`/`removetrack` events). rtc.io reuses idle transceivers and avoids spinning up new ones; full track removal flips the transceiver to `inactive` rather than tearing it down.
 - **Backpressure** — every channel has a `bufferedAmount` watermark and a queue budget; `send()` returns false when the channel is full and emits `drain` when it's safe to resume.
 - **Channel pairing** — `negotiated:true` with deterministic ids means no DC-OPEN handshake, no glare on the channel layer.
 
