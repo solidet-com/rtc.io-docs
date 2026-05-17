@@ -40,12 +40,16 @@ A trailing function argument (the socket.io ack idiom) is dropped with a warning
 ch.send(data: ArrayBuffer | string): boolean
 ```
 
-Send raw bytes or a raw string. Used for streaming binary blobs (file chunks, codec output) where the JSON envelope shape doesn't fit. Returns `true` if sent immediately, `false` if queued or refused (channel full, queue budget exceeded).
+Send raw bytes or a raw string. Used for streaming binary blobs (file chunks, codec output) where the JSON envelope shape doesn't fit.
+
+- **Returns `true`** — chunk accepted. Either sent on the wire (channel open, room under `highWatermark`) or queued in JS (channel still connecting, or above the high-water mark). The library flushes queued chunks on `'open'` / `'drain'`.
+- **Returns `false`** — chunk **dropped**. The JS queue is at `queueBudget` and the chunk was not buffered. `'error'` also fires. Wait for `'drain'`, then retry the same buffer.
 
 ```ts
 const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
-const ok = ch.send(buf);
-if (!ok) await new Promise((r) => ch.once("drain", r));
+while (!ch.send(buf)) {
+  await new Promise((r) => ch.once("drain", r));
+}
 ```
 
 See [Backpressure & flow control](/docs/guides/backpressure) for the full pattern.
@@ -124,9 +128,9 @@ Three knobs govern how much the channel will buffer before refusing or draining:
 
 | Default | Option | Role |
 |---|---|---|
-| 16 MB | `highWatermark` | `bufferedAmount` ≥ this → `send()` returns `false` and the library queues your bytes. |
-| 1 MB | `lowWatermark` | `bufferedAmount` falls back through this → `'drain'` fires. Forwarded to `RTCDataChannel.bufferedAmountLowThreshold`. |
-| 1 MB | `queueBudget` | Hard cap on the JS-side queue (held while the channel is connecting or while above the high watermark). Exceeding fires `'error'`. |
+| 16 MB | `highWatermark` | `bufferedAmount + chunkSize > this` → the library moves the chunk to the JS queue instead of pushing it straight onto the wire. `send()` still returns `true`. |
+| 1 MB | `lowWatermark` | `bufferedAmount` falls back through this → library flushes the JS queue and emits `'drain'`. Forwarded to `RTCDataChannel.bufferedAmountLowThreshold`. |
+| 1 MB | `queueBudget` | Hard cap on the JS-side queue. Exceeding it drops the chunk, returns `false` from `send()`, and fires `'error'`. |
 
 All three are configurable per-channel:
 
@@ -156,7 +160,8 @@ async function streamFile(ch, file) {
   const CHUNK = 16 * 1024;
   for (let offset = 0; offset < file.size; offset += CHUNK) {
     const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
-    if (!ch.send(buf)) {
+    while (!ch.send(buf)) {
+      // send() returned false — chunk was dropped. Wait, then retry.
       await new Promise((r) => ch.once("drain", r));
     }
   }
@@ -191,9 +196,7 @@ ch.emit("score", 1);
 `error` fires for two reasons:
 
 1. The underlying `RTCDataChannel` raised an `error` event — usually a transport problem.
-2. You exceeded the queue budget while the channel was queueing — `RTCIOChannel: queue budget exceeded — wait for 'drain' before sending more`.
-
-If you see (2), either raise the budget for that channel or back off your sender.
+2. You exceeded the queue budget while the channel was queueing — `RTCIOChannel: queue budget exceeded — chunk dropped, wait for 'drain' and retry`. The chunk that triggered this is not buffered; the `send()` call also returned `false`. Retry the same buffer after `'drain'`, or raise `queueBudget` to give the sender more headroom.
 
 If a `send`/`emit` triggers an exception in the underlying transport (rare; usually means the channel was closed mid-call), `error` fires with the underlying error and `send` returns false.
 

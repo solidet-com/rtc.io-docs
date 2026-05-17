@@ -132,7 +132,7 @@ Both sides run this, so both sides create the channel with the same hash id. The
 | `maxRetransmits` | unlimited | Number of retransmission attempts before giving up on a packet. Mutually exclusive with `maxPacketLifeTime`. |
 | `maxPacketLifeTime` | unlimited | Maximum ms to keep retrying a packet. Mutually exclusive with `maxRetransmits`. |
 | `queueBudget` | 1 MB | Library-side cap on bytes buffered *before* the channel is open (or while above the high watermark). Not passed to `RTCDataChannel`. |
-| `highWatermark` | 16 MB | `bufferedAmount` threshold above which `send()` returns `false` and the library queues. Library-only; the browser doesn't expose this as a constructor option. |
+| `highWatermark` | 16 MB | `bufferedAmount + chunkSize` ceiling. Above it, the chunk is queued in JS instead of sent on the wire; `send()` still returns `true`. Library-only; the browser doesn't expose this as a constructor option. |
 | `lowWatermark` | 1 MB | `bufferedAmount` value at which `'drain'` fires. Forwarded to `RTCDataChannel.bufferedAmountLowThreshold`. Must be < `highWatermark`. |
 
 `maxRetransmits` and `maxPacketLifeTime` are mutually exclusive — if both are set the browser ignores one. Use one or the other for unreliable channels.
@@ -161,7 +161,8 @@ const file = socket.peer(id).createChannel("file", {
 // Send a structured event (JSON envelope, like socket.io).
 chan.emit("msg", { user: "alice", text: "hi" });
 
-// Send raw bytes or a raw string. Returns false if the channel is queueing.
+// Send raw bytes or a raw string. Returns true if accepted (sent or queued);
+// false only if the JS queue was full and the chunk was dropped.
 chan.send(arrayBuffer);
 ```
 

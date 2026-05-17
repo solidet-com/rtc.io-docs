@@ -48,7 +48,7 @@ Synchronous. Doesn't wait for delivery.
 chat.send(data: ArrayBuffer | string): boolean
 ```
 
-Raw bytes, fanned out. Returns `true` only if every peer's per-peer `send` returned true; if any peer was queueing, returns false.
+Raw bytes, fanned out. Returns `true` only if every peer's per-peer `send` accepted the chunk (sent or queued in JS). Returns `false` if any peer dropped it because that peer's JS queue was full — in that case `'error'` also fires on the affected peer's channel, and you should wait for `'drain'` on each laggard and retry the same buffer there.
 
 You probably won't `send` raw bytes on a broadcast channel — chunked file transfer is better as a per-peer thing. But it works if you have a use case.
 

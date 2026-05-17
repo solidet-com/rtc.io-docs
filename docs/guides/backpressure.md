@@ -1,7 +1,7 @@
 ---
 id: backpressure
 title: Backpressure & flow control
-description: How rtc.io keeps DataChannel buffers from blowing up — the queue budget, watermarks, drain events, and what `send` returning false means.
+description: How rtc.io keeps DataChannel buffers from blowing up — the queue budget, watermarks, drain events, and the send-true/send-false contract.
 ---
 
 import StackBlitz from '@site/src/components/StackBlitz';
@@ -20,7 +20,7 @@ export const HIGH_WATERMARK = 16_777_216;  // 16 MB — pause sending above this
 export const LOW_WATERMARK  =  1_048_576;  //  1 MB — resume sending below this
 ```
 
-When `bufferedAmount ≥ HIGH_WATERMARK`, `channel.send()` returns `false` and your bytes are held in the JS-side queue. When `bufferedAmount` falls back through `LOW_WATERMARK`, the browser fires `bufferedamountlow` (driven by `RTCDataChannel.bufferedAmountLowThreshold`, which the library sets to the channel's `lowWatermark`) and rtc.io emits `'drain'` on your channel.
+When `bufferedAmount + chunkSize > HIGH_WATERMARK`, the library holds your bytes in the JS-side queue instead of pushing them straight into the transport — `channel.send()` still returns `true` because the chunk was accepted. When `bufferedAmount` falls back through `LOW_WATERMARK`, the browser fires `bufferedamountlow` (driven by `RTCDataChannel.bufferedAmountLowThreshold`, which the library sets to the channel's `lowWatermark`) and rtc.io drains the queue and emits `'drain'` on your channel. `send()` only returns `false` when the JS queue itself is full — see [The queue budget](#the-queue-budget) below.
 
 Both are configurable per-channel via `ChannelOptions` if the defaults don't fit your shape:
 
@@ -48,10 +48,10 @@ Bytes you call `send()` with *before the channel is open* (or while `bufferedAmo
 export const QUEUE_BUDGET = 1_048_576;  // 1 MB default
 ```
 
-If you exceed it, rtc.io fires `'error'` on the channel with a clear message:
+If you exceed it, the chunk is **dropped** (not buffered), `send()` returns `false`, and rtc.io fires `'error'` on the channel with a clear message:
 
 ```
-RTCIOChannel: queue budget exceeded — wait for 'drain' before sending more
+RTCIOChannel: queue budget exceeded — chunk dropped, wait for 'drain' and retry
 ```
 
 You can raise it per-channel if you have headroom and want more buffering:
@@ -68,18 +68,13 @@ The budget applies to JS queueing only. Once the channel opens and bytes flow in
 const ok = channel.send(arrayBuffer);
 ```
 
-- **`true`** — sent immediately. Channel is open and below high-water.
-- **`false`** — queued (or refused). One of:
-  - Channel is still `connecting` — buffered, will flush on `'open'`.
-  - `bufferedAmount` ≥ the channel's `highWatermark` — back off until `'drain'`.
-  - There's already a queue — your send is appended to it.
-  - Queue budget exceeded — `'error'` fires, no buffering happened.
+- **`true`** — **accepted**. The chunk either went straight onto the wire or was placed in the JS queue. The library will flush queued chunks automatically on `'open'` / `'drain'`. One of:
+  - Channel is `open`, `bufferedAmount + size ≤ highWatermark`, queue empty → sent immediately.
+  - Channel is `connecting` → queued, flushes on `'open'`.
+  - Above the high-water mark or queue non-empty → queued, flushes on `'drain'`.
+- **`false`** — **dropped**. The JS queue is at `queueBudget` and the chunk was *not* buffered. `'error'` fires. Wait for `'drain'`, then **retry the same chunk** — the library does not retry for you.
 
-`emit` (the higher-level JSON envelope API) wraps `send` and behaves the same way:
-
-```ts
-const ok = channel.emit("event", payload);  // returns boolean
-```
+`send` is the only call that can return `false`. `emit` (the higher-level JSON envelope API) wraps `send` and returns `void`; if you push enough envelopes to overflow the queue you'll see the `'error'` event, but there's no boolean to inspect.
 
 ## The drain pattern
 
@@ -93,14 +88,16 @@ async function streamFile(channel, file) {
 
   for (let offset = 0; offset < file.size; offset += CHUNK) {
     const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
-    if (!channel.send(buf)) {
+    while (!channel.send(buf)) {
+      // send() returned false — chunk was dropped (queue full).
+      // Wait for the channel to drain, then retry the *same* chunk.
       await new Promise((res) => channel.once("drain", res));
     }
   }
 }
 ```
 
-`once("drain")` resolves the next time `bufferedAmount` falls through the channel's `lowWatermark` (1 MB by default). The `send`-then-await-drain loop is the simplest correct pattern for streaming a file or any large blob.
+`once("drain")` resolves the next time `bufferedAmount` falls through the channel's `lowWatermark` (1 MB by default), at which point rtc.io has also flushed the JS queue. The `while`-not-`if` matters: a `false` return means the chunk was dropped, not queued, so you must call `send` again with the *same* buffer once the channel signals capacity. Looping with `while` handles the corner case where the queue immediately refills between retries.
 
 ## Picking a chunk size
 
@@ -118,7 +115,9 @@ For interactive payloads (cursor positions, RPC requests) you don't need to chun
 
 ## Send order
 
-If `send` returns false, the channel queues your data and tries to flush on the next `open`/`drain`. **Order is preserved.** Don't try to recover from a `false` return by calling `send` again immediately — that just appends another item. Wait for `'drain'`.
+When `send` returns `true` and the chunk landed in the JS queue, the library flushes those queued items in FIFO order on the next `open` / `drain`. **Order is preserved for everything that was accepted.**
+
+When `send` returns `false`, the chunk was *not* queued — it's gone. To preserve order, retry that same chunk before issuing any new sends, and don't busy-loop: wait for `'drain'` first so the queue actually has capacity.
 
 ## Receiving with backpressure
 
@@ -177,7 +176,7 @@ For data-only stats (no media), see [Stats](stats).
 
 ## Live: a real backpressure-aware sender
 
-The whole `send()` returning `false` → `await once('drain')` loop, in 60 lines.
+The whole `while (!send())` → `await once('drain')` → retry loop, in 60 lines.
 
 <StackBlitz
   files={fileTransfer}

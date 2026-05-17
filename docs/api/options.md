@@ -194,7 +194,7 @@ For most apps the 1 MB default is fine. Raise it for big single-file transfers; 
 highWatermark?: number    // default 16 MB (16_777_216)
 ```
 
-The `bufferedAmount` threshold above which the channel is considered *full*. While `bufferedAmount ≥ highWatermark`, `channel.send()` returns `false` and your bytes are held in the JS queue (subject to `queueBudget`) until the browser drains the transport.
+The `bufferedAmount` ceiling. While `bufferedAmount + chunkSize > highWatermark`, the library holds your bytes in the JS queue (subject to `queueBudget`) until the browser drains the transport — `channel.send()` still returns `true` because the chunk was accepted. `send()` only returns `false` when the JS queue itself is full and the chunk was dropped.
 
 Lower it to cap the OS-side transport buffer — less memory, lower steady-state end-to-end latency, but throughput on bursty writes drops because you spend more time in the pause/drain cycle. Raise it for high-bandwidth fat-pipe links (gigabit LAN, server-to-server) where you want a deeper pipeline and the memory is available.
 

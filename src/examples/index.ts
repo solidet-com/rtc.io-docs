@@ -516,10 +516,10 @@ fileInput.addEventListener('change', async () => {
   for (let off = 0; off < file.size; off += CHUNK) {
     const buf = await file.slice(off, off + CHUNK).arrayBuffer();
     for (const [, channel] of channels) {
-      // send() returning false means the chunk was queued. Wait for the
-      // 'drain' event before pushing more — this is the entire backpressure
-      // contract.
-      if (!channel.send(buf)) {
+      // send() returning false means the chunk was dropped (queue budget
+      // full). Wait for 'drain' and retry the same buffer — looping with
+      // 'while' is the backpressure contract.
+      while (!channel.send(buf)) {
         await new Promise<void>((r) => channel.once('drain', () => r()));
       }
     }

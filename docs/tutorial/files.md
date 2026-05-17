@@ -51,8 +51,9 @@ export async function sendFile(ch: RTCIOChannel, file: File): Promise<void> {
 
   for (let offset = 0; offset < file.size; offset += CHUNK) {
     const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
-    if (!ch.send(buf)) {
-      // Channel is queueing — wait for drain so we don't blow the budget.
+    while (!ch.send(buf)) {
+      // send() returned false — the JS queue is full and this chunk was
+      // dropped. Wait for drain, then retry the *same* buffer.
       await new Promise((res) => ch.once("drain", res));
     }
   }
@@ -63,7 +64,7 @@ export async function sendFile(ch: RTCIOChannel, file: File): Promise<void> {
 
 Three details worth highlighting:
 
-- **`ch.send(buf)` returns false when the channel is full.** Without a wait-for-drain, your loop would queue the entire file into JS memory and exceed the queue budget. This is the canonical [backpressure](/docs/guides/backpressure) pattern.
+- **`ch.send(buf)` returns `false` when the JS queue is full and the chunk was dropped.** The `while` loop re-issues the same buffer once the channel drains — without that, you'd skip a chunk every time the queue overflows and the receiver's blob would be corrupt. This is the canonical [backpressure](/docs/guides/backpressure) pattern.
 - **`ch.send` for binary; `ch.emit` for the structured `meta` and `eof` envelopes.** Same channel, different dispatch on the receive side.
 - **16 KB chunks.** Big enough to amortize overhead, small enough for fine-grained progress and to stay well under the SCTP message limit.
 
